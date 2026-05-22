@@ -1,10 +1,10 @@
+import { spawn, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawn, spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 import {
   type RfmDiagnostic,
   validateRoughdraftMarkdown,
@@ -47,6 +47,7 @@ export interface RoughdraftServerState {
   pid: number;
   startedAt: string;
   url: string;
+  logFile?: string;
 }
 
 interface StatusPayload {
@@ -84,6 +85,7 @@ export interface CliDependencies {
   spawnServerProcess: (options: {
     port: number;
     projectDir: string;
+    logFilePath: string;
   }) => Promise<SpawnedServer> | SpawnedServer;
   isProcessRunning: (pid: number) => boolean;
   stopProcess: (pid: number) => Promise<void>;
@@ -693,7 +695,10 @@ async function defaultStopProcess(pid: number): Promise<void> {
 function defaultSpawnServerProcess(options: {
   port: number;
   projectDir: string;
+  logFilePath: string;
 }): SpawnedServer {
+  fs.mkdirSync(path.dirname(options.logFilePath), { recursive: true });
+  const logFd = fs.openSync(options.logFilePath, "a");
   const serverEntryPath = fileURLToPath(new URL("./child.js", import.meta.url));
   const child = spawn(
     process.execPath,
@@ -707,12 +712,13 @@ function defaultSpawnServerProcess(options: {
     {
       cwd: options.projectDir,
       detached: true,
-      stdio: "ignore",
+      stdio: ["ignore", logFd, logFd],
       windowsHide: true,
       env: process.env,
     },
   );
 
+  fs.closeSync(logFd);
   child.unref();
 
   if (!child.pid) {
@@ -1389,6 +1395,17 @@ export function getServerStateFilePath(
   return path.join(os.homedir(), ".roughdraft", "server.json");
 }
 
+export function getServerLogFilePath(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const explicitFile = env.ROUGHDRAFT_LOG_FILE?.trim();
+  if (explicitFile) {
+    return path.resolve(explicitFile);
+  }
+
+  return path.join(path.dirname(getServerStateFilePath(env)), "server.log");
+}
+
 function isValidServerState(value: unknown): value is RoughdraftServerState {
   if (!value || typeof value !== "object") return false;
 
@@ -1401,7 +1418,9 @@ function isValidServerState(value: unknown): value is RoughdraftServerState {
     typeof candidate.startedAt === "string" &&
     candidate.startedAt.length > 0 &&
     typeof candidate.url === "string" &&
-    candidate.url.length > 0
+    candidate.url.length > 0 &&
+    (candidate.logFile === undefined ||
+      (typeof candidate.logFile === "string" && candidate.logFile.length > 0))
   );
 }
 
@@ -1604,10 +1623,16 @@ async function resolveLiveDevFrontendBaseUrl(
 async function normalizeTrackedState(
   persistedState: RoughdraftServerState,
   stateFilePath: string,
+  env: NodeJS.ProcessEnv,
 ): Promise<RoughdraftServerState> {
   const normalizedState = {
     ...persistedState,
     url: buildPublicBaseUrl(persistedState.port),
+    logFile:
+      typeof persistedState.logFile === "string" &&
+      persistedState.logFile.trim().length > 0
+        ? path.resolve(persistedState.logFile)
+        : getServerLogFilePath(env),
   };
 
   if (normalizedState.url !== persistedState.url) {
@@ -1641,6 +1666,7 @@ async function findReusableServer(
       const normalizedState = await normalizeTrackedState(
         persistedState,
         stateFilePath,
+        deps.env,
       );
       return {
         port: normalizedState.port,
@@ -1714,9 +1740,11 @@ export async function ensureServerRunning(
   const preferredPort = getPreferredPort(deps.env);
   const port = await deps.findAvailablePortImpl(preferredPort);
   const projectDir = path.resolve(options.projectDir ?? deps.cwd);
+  const logFilePath = getServerLogFilePath(deps.env);
   const spawned = await deps.spawnServerProcess({
     port,
     projectDir,
+    logFilePath,
   });
 
   try {
@@ -1731,6 +1759,7 @@ export async function ensureServerRunning(
     pid: spawned.pid,
     startedAt: new Date().toISOString(),
     url: buildPublicBaseUrl(port),
+    logFile: logFilePath,
   };
   writeServerStateToDisk(getServerStateFilePath(deps.env), state);
 
@@ -1750,11 +1779,13 @@ export async function ensureServerRunning(
 function buildServerStatusJson(
   server: ReusableServer | null,
   stateFilePath: string,
+  env: NodeJS.ProcessEnv,
 ) {
   if (!server) {
     return {
       running: false,
       stateFile: stateFilePath,
+      logFile: getServerLogFilePath(env),
     };
   }
 
@@ -1765,6 +1796,7 @@ function buildServerStatusJson(
     pid: server.pid,
     startedAt: server.startedAt,
     stateFile: stateFilePath,
+    logFile: getServerLogFilePath(env),
     managed: server.tracked,
   };
 }
@@ -2232,6 +2264,7 @@ export async function runCli(
           ...buildServerStatusJson(
             result.server,
             getServerStateFilePath(deps.env),
+            deps.env,
           ),
           reused: result.reused,
           portChanged: result.portChanged,
@@ -2287,7 +2320,11 @@ export async function runCli(
         if (json) {
           emitJson(
             deps.log,
-            buildServerStatusJson(null, getServerStateFilePath(deps.env)),
+            buildServerStatusJson(
+              null,
+              getServerStateFilePath(deps.env),
+              deps.env,
+            ),
           );
           return 0;
         }
@@ -2301,7 +2338,11 @@ export async function runCli(
       if (json) {
         emitJson(
           deps.log,
-          buildServerStatusJson(server, getServerStateFilePath(deps.env)),
+          buildServerStatusJson(
+            server,
+            getServerStateFilePath(deps.env),
+            deps.env,
+          ),
         );
         return 0;
       }
@@ -2311,6 +2352,7 @@ export async function runCli(
         deps.log(`PID: ${server.pid}`);
         deps.log(`Started: ${server.startedAt}`);
         deps.log(`State file: ${getServerStateFilePath(deps.env)}`);
+        deps.log(`Log file: ${getServerLogFilePath(deps.env)}`);
       } else {
         deps.log(
           `This server is not managed by ${getServerStateFilePath(deps.env)}.`,

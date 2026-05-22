@@ -1,4 +1,11 @@
-import type { BackendInfo, Page, StorageBackend, StoredAsset } from "./storage";
+import type {
+  BackendInfo,
+  Page,
+  StorageBackend,
+  StoredAsset,
+  VoiceActionResult,
+  VoiceSelectionSnapshot,
+} from "./storage";
 
 const PAGES_KEY = "roughdraft:pages";
 const ASSETS_KEY = "roughdraft:assets";
@@ -115,6 +122,19 @@ export class LocalStorageBackend implements StorageBackend {
 
   async completeReview(_relativePath: string): Promise<{ delivered: boolean }> {
     return { delivered: false };
+  }
+
+  async processVoiceUtterance(
+    _relativePath: string,
+    utterance: string,
+    _selection: VoiceSelectionSnapshot,
+  ): Promise<VoiceActionResult> {
+    return {
+      action: "comment",
+      content: utterance.trim(),
+      confidence: 0.3,
+      uncertain: true,
+    };
   }
 
   async saveAsset(file: File): Promise<StoredAsset> {

@@ -90,6 +90,10 @@ Paragraph with **bold**, [link](https://example.com), `inline code`.
 | Document | Editing mode | Open mode menu and choose Editing | `document-mode-trigger` | Normal edit behavior. |
 | Document | Suggesting mode | Open mode menu and choose Suggesting | `document-mode-trigger` | Selection actions should create suggestions instead of direct edits. |
 | Document | Viewing mode | Open mode menu and choose Viewing | `document-mode-trigger` | Editing controls should look non-editable. |
+| Document | Voice status: recording | Select text in rich editor while mic permission is granted | `voice-review-status` | Badge should show `Voice: recording`. |
+| Document | Voice status: processing | Speak an utterance while selection is active | `voice-review-status` | Badge should show `Voice: processing` while inference runs. |
+| Document | Voice status: paused | Clear selection after recording starts | `voice-review-status` | Badge should show `Voice: paused` after debounce window. |
+| Document | Voice status: error | Deny mic permission or run unsupported browser | `voice-review-status` | Badge should show `Voice: error` with a message. |
 | Document | Save status: saved | Any clean document after autosave | `document-save-status` | Label should be `Saved`. |
 | Document | Save status: unsaved | Type in a local document before save completes | `document-save-status` | Transient; often easier with save throttling or network mocking. |
 | Document | Save status: saving | Type and capture during autosave | `document-save-status` | Transient; easiest with mocked delayed save. |

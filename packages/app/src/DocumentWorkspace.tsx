@@ -349,6 +349,11 @@ export function DocumentWorkspace({
 
     setReviewHandoffState("notifying");
     try {
+      window.dispatchEvent(
+        new CustomEvent("roughdraft:review-handoff", {
+          detail: { path: activeDocumentPath },
+        }),
+      );
       const result = await onCompleteReview();
       if (result.delivered) {
         setReviewWatcherCount(0);

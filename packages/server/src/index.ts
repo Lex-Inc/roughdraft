@@ -1,15 +1,17 @@
-import express, { type Express, type Request, type Response } from "express";
+import { execFile } from "node:child_process";
 import crypto from "node:crypto";
-import os from "node:os";
-import { createServer as createHttpServer } from "node:http";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
 import fs from "node:fs";
+import { createServer as createHttpServer } from "node:http";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { extractRoughdraftReviewIndex } from "@roughdraft/rfm";
+import express, { type Express, type Request, type Response } from "express";
 import {
+  hasNonLoopbackHost,
   ROUGHDRAFT_DEFAULT_PORT,
   ROUGHDRAFT_PUBLIC_HOST,
-  hasNonLoopbackHost,
   resolveBindHosts,
 } from "./network.js";
 import { ReviewEventQueue } from "./review-events.js";
@@ -103,11 +105,112 @@ interface RemoteDocumentSavePayload {
   expectedVersion?: string;
 }
 
+interface VoiceSelectionPayload {
+  from?: number;
+  to?: number;
+  selectedText?: string;
+}
+
+interface VoiceProcessPayload {
+  path?: string;
+  projectPath?: string;
+  utterance?: string;
+  selection?: VoiceSelectionPayload;
+}
+
+type VoiceActionType =
+  | "comment"
+  | "suggestion_addition"
+  | "suggestion_deletion"
+  | "suggestion_substitution";
+
+interface VoiceActionResult {
+  action: VoiceActionType;
+  content: string;
+  replacementText?: string;
+  confidence: number;
+  uncertain?: boolean;
+}
+
+function hasExplicitEditIntent(utterance: string): boolean {
+  const normalized = utterance.toLowerCase();
+  return /\b(delete|remove|replace|rewrite|reword|change|add|insert|move|cut|shorten|expand|merge|split|fix)\b/.test(
+    normalized,
+  );
+}
+
+function shouldForceComment(utterance: string): boolean {
+  const normalized = utterance.toLowerCase();
+  if (normalized.includes("?")) return true;
+  if (
+    /^(what|why|how|where|when|who|can|could|would|should|is|are|do|does|did)\b/.test(
+      normalized,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function coerceVoiceActionResult(
+  utterance: string,
+  result: VoiceActionResult,
+): VoiceActionResult {
+  if (result.action === "comment") return result;
+  if (hasExplicitEditIntent(utterance) && !shouldForceComment(utterance)) {
+    return result;
+  }
+  return {
+    action: "comment",
+    content: utterance,
+    confidence: Math.min(result.confidence, 0.85),
+    uncertain: result.uncertain ?? false,
+  };
+}
+
 const REMOTE_SESSION_TTL_MS = 5 * 60 * 1000;
 const REMOTE_SESSION_SWEEP_INTERVAL_MS = 60 * 1000;
 const REMOTE_SESSION_KEEPALIVE_MS = 15 * 1000;
 
 let nextOpenRequestClientId = 1;
+
+const ROUGHDRAFT_OPENROUTER_API_KEY_ENV = "ROUGHDRAFT_OPENROUTER_API_KEY";
+const ROUGHDRAFT_LLM_MODEL_ENV = "ROUGHDRAFT_LLM_MODEL";
+const DEFAULT_VOICE_MODEL = "openai/gpt-4o-mini";
+const ROUGHDRAFT_VOICE_MODEL_DIR_ENV = "ROUGHDRAFT_VOICE_MODEL_DIR";
+const ROUGHDRAFT_VOICE_TRANSCRIBE_COMMAND_ENV =
+  "ROUGHDRAFT_VOICE_TRANSCRIBE_COMMAND";
+const execFileAsync = promisify(execFile);
+
+interface VoiceTranscriptionSession {
+  id: string;
+  chunks: Buffer[];
+  mimeType: string;
+  createdAt: number;
+}
+
+function logVoice(event: string, data: Record<string, unknown> = {}): void {
+  const payload = {
+    ts: new Date().toISOString(),
+    event,
+    ...data,
+  };
+  console.log(`[voice] ${JSON.stringify(payload)}`);
+}
+
+function summarizeApiKey(
+  value: string | undefined,
+): { present: boolean; prefix: string | null; length: number } {
+  const trimmed = value?.trim() ?? "";
+  if (trimmed.length === 0) {
+    return { present: false, prefix: null, length: 0 };
+  }
+  return {
+    present: true,
+    prefix: trimmed.slice(0, 12),
+    length: trimmed.length,
+  };
+}
 
 function remoteSessionVersion(content: string): string {
   const hash = crypto.createHash("sha256").update(content).digest("hex");
@@ -382,6 +485,285 @@ function listProjectTree(projectDir: string): ProjectTreeListing {
   return { paths };
 }
 
+function normalizeVoiceActionCandidate(value: unknown): VoiceActionType | null {
+  if (
+    value === "comment" ||
+    value === "suggestion_addition" ||
+    value === "suggestion_deletion" ||
+    value === "suggestion_substitution"
+  ) {
+    return value;
+  }
+
+  return null;
+}
+
+function parseVoiceActionResult(payload: unknown): VoiceActionResult | null {
+  if (!payload || typeof payload !== "object") return null;
+  const data = payload as {
+    action?: unknown;
+    content?: unknown;
+    replacementText?: unknown;
+    confidence?: unknown;
+    uncertain?: unknown;
+  };
+  const action = normalizeVoiceActionCandidate(data.action);
+  const content =
+    typeof data.content === "string" ? data.content.trim() : undefined;
+
+  if (!action || !content) return null;
+
+  return {
+    action,
+    content,
+    replacementText:
+      typeof data.replacementText === "string" &&
+      data.replacementText.trim().length > 0
+        ? data.replacementText.trim()
+        : undefined,
+    confidence:
+      typeof data.confidence === "number"
+        ? Math.min(1, Math.max(0, data.confidence))
+        : 0.5,
+    uncertain: data.uncertain === true,
+  };
+}
+
+async function inferVoiceActionWithOpenRouter(
+  utterance: string,
+  selectedText: string,
+  fetchImpl: typeof fetch,
+): Promise<VoiceActionResult> {
+  const apiKey = process.env[ROUGHDRAFT_OPENROUTER_API_KEY_ENV];
+  const model =
+    process.env[ROUGHDRAFT_LLM_MODEL_ENV]?.trim() || DEFAULT_VOICE_MODEL;
+  const keySummary = summarizeApiKey(apiKey);
+  logVoice("inference.config", {
+    apiKeyPresent: keySummary.present,
+    apiKeyPrefix: keySummary.prefix,
+    apiKeyLength: keySummary.length,
+    model,
+    utteranceChars: utterance.length,
+    selectedTextChars: selectedText.length,
+  });
+  if (!apiKey || apiKey.trim().length === 0) {
+    logVoice("inference.fallback.no_api_key", {
+      envKey: ROUGHDRAFT_OPENROUTER_API_KEY_ENV,
+    });
+    return {
+      action: "comment",
+      content: utterance,
+      confidence: 0.2,
+      uncertain: true,
+    };
+  }
+
+  const response = await fetchImpl(
+    "https://openrouter.ai/api/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              "You convert dictated review feedback into a single JSON object with keys: action, content, replacementText, confidence, uncertain. action must be one of comment|suggestion_addition|suggestion_deletion|suggestion_substitution. Default to action=comment unless the utterance is an explicit edit instruction (delete/remove/replace/add/rewrite/etc). Questions, reactions, uncertainty, or discussion should be comment.",
+          },
+          {
+            role: "user",
+            content: `Selected text:\n${selectedText}\n\nUtterance:\n${utterance}\n\nReturn only JSON.`,
+          },
+        ],
+      }),
+    },
+  );
+
+  logVoice("inference.http.response", {
+    status: response.status,
+    ok: response.ok,
+  });
+  if (!response.ok) {
+    let errorBody = "";
+    try {
+      errorBody = await response.text();
+    } catch {
+      errorBody = "";
+    }
+    logVoice("inference.fallback.http_error", {
+      status: response.status,
+      bodyPreview: errorBody.slice(0, 500),
+    });
+    return {
+      action: "comment",
+      content: utterance,
+      confidence: 0.2,
+      uncertain: true,
+    };
+  }
+
+  const payload = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string | null } }>;
+  };
+  const content = payload.choices?.[0]?.message?.content;
+  if (typeof content !== "string" || content.trim().length === 0) {
+    logVoice("inference.fallback.empty_content", {
+      hasChoices: Array.isArray(payload.choices),
+    });
+    return {
+      action: "comment",
+      content: utterance,
+      confidence: 0.2,
+      uncertain: true,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(content);
+    const parsedResult = parseVoiceActionResult(parsed);
+    if (!parsedResult) {
+      logVoice("inference.fallback.schema_mismatch", {
+        contentPreview: content.slice(0, 500),
+      });
+    } else {
+      logVoice("inference.result", {
+        action: parsedResult.action,
+        confidence: parsedResult.confidence,
+        uncertain: parsedResult.uncertain === true,
+      });
+    }
+    const resolved =
+      parsedResult ?? {
+        action: "comment",
+        content: utterance,
+        confidence: 0.2,
+        uncertain: true,
+      };
+    const coerced = coerceVoiceActionResult(utterance, resolved);
+    if (coerced.action !== resolved.action) {
+      logVoice("inference.coerce_to_comment", {
+        utterancePreview: utterance.slice(0, 120),
+        originalAction: resolved.action,
+        coercedAction: coerced.action,
+      });
+    }
+    return coerced;
+  } catch {
+    logVoice("inference.fallback.json_parse_error", {
+      contentPreview: content.slice(0, 500),
+    });
+    return {
+      action: "comment",
+      content: utterance,
+      confidence: 0.2,
+      uncertain: true,
+    };
+  }
+}
+
+function resolveVoiceModelPath(): string {
+  const modelDir =
+    process.env[ROUGHDRAFT_VOICE_MODEL_DIR_ENV]?.trim() ||
+    path.join(
+      os.homedir(),
+      "Library/Application Support/com.prakashjoshipax.VoiceInk/WhisperModels",
+    );
+  return path.join(modelDir, "ggml-large-v3-turbo.bin");
+}
+
+function parseCommandTemplate(template: string): {
+  command: string;
+  args: string[];
+} {
+  const parts = template
+    .split(" ")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  const command = parts.shift();
+  if (!command) {
+    throw new Error("voice transcribe command is empty");
+  }
+  return { command, args: parts };
+}
+
+async function transcribeLocalAudioFromBuffer(
+  audioBuffer: Buffer,
+): Promise<string> {
+  const commandTemplate = process.env[ROUGHDRAFT_VOICE_TRANSCRIBE_COMMAND_ENV];
+  if (!commandTemplate || commandTemplate.trim().length === 0) {
+    logVoice("transcribe.skip.no_command", {
+      envKey: ROUGHDRAFT_VOICE_TRANSCRIBE_COMMAND_ENV,
+    });
+    return "";
+  }
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "roughdraft-voice-"));
+  const audioPath = path.join(tempDir, "audio.webm");
+  const outputPath = path.join(tempDir, "transcript");
+  fs.writeFileSync(audioPath, audioBuffer);
+
+  const { command, args } = parseCommandTemplate(commandTemplate);
+  const modelPath = resolveVoiceModelPath();
+  const resolvedArgs = args.map((arg) =>
+    arg
+      .replaceAll("{audio}", audioPath)
+      .replaceAll("{output}", outputPath)
+      .replaceAll("{model}", modelPath),
+  );
+  logVoice("transcribe.exec.start", {
+    command,
+    resolvedArgs,
+    modelPath,
+    audioBytes: audioBuffer.length,
+    audioPath,
+    outputPath,
+  });
+
+  try {
+    const { stdout, stderr } = await execFileAsync(command, resolvedArgs, {
+      timeout: 120_000,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    logVoice("transcribe.exec.done", {
+      stdoutChars: stdout.length,
+      stderrChars: stderr.length,
+      stderrPreview: stderr.slice(0, 500),
+    });
+    if (fs.existsSync(outputPath)) {
+      const transcript = fs.readFileSync(outputPath, "utf-8").trim();
+      logVoice("transcribe.output.direct", {
+        transcriptChars: transcript.length,
+      });
+      return transcript;
+    }
+    if (fs.existsSync(`${outputPath}.txt`)) {
+      const transcript = fs.readFileSync(`${outputPath}.txt`, "utf-8").trim();
+      logVoice("transcribe.output.txt", {
+        transcriptChars: transcript.length,
+      });
+      return transcript;
+    }
+    const transcript = stdout.trim();
+    logVoice("transcribe.output.stdout", {
+      transcriptChars: transcript.length,
+    });
+    return transcript;
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "unknown transcription error";
+    logVoice("transcribe.exec.error", { message });
+    throw error;
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    logVoice("transcribe.cleanup", { tempDirRemoved: tempDir });
+  }
+}
+
 export function createApp(options: CreateAppOptions = {}): CreateAppResult {
   const port = options.port ?? ROUGHDRAFT_DEFAULT_PORT;
   const homeDir = options.homeDir ?? os.homedir();
@@ -397,6 +779,7 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
   const openRequestClients = new Set<OpenRequestClient>();
   const reviewEvents = new ReviewEventQueue();
   const remoteSessions = new Map<string, RemoteSession>();
+  const voiceSessions = new Map<string, VoiceTranscriptionSession>();
 
   function isAuthorizedRemoteDocumentRequest(req: Request): boolean {
     if (!remoteDocumentToken) return true;
@@ -684,6 +1067,184 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
       watching: watcherCount > 0,
       watcherCount,
     });
+  });
+
+  app.post("/api/voice/session/start", (_req, res) => {
+    const id = crypto.randomUUID();
+    voiceSessions.set(id, {
+      id,
+      chunks: [],
+      mimeType: "audio/webm",
+      createdAt: Date.now(),
+    });
+    logVoice("session.start", { sessionId: id });
+    res.status(201).json({ sessionId: id });
+  });
+
+  app.post("/api/voice/session/chunk", (req, res) => {
+    const sessionId =
+      typeof req.body?.sessionId === "string" ? req.body.sessionId : "";
+    const audioBase64 =
+      typeof req.body?.audioBase64 === "string" ? req.body.audioBase64 : "";
+    const mimeType =
+      typeof req.body?.mimeType === "string" ? req.body.mimeType : "audio/webm";
+
+    const session = voiceSessions.get(sessionId);
+    if (!session) {
+      logVoice("session.chunk.missing", { sessionId });
+      res.status(404).json({ error: "voice session not found" });
+      return;
+    }
+
+    if (!audioBase64) {
+      logVoice("session.chunk.empty", { sessionId });
+      res.status(400).json({ error: "audioBase64 is required" });
+      return;
+    }
+
+    session.mimeType = mimeType;
+    const chunk = Buffer.from(audioBase64, "base64");
+    session.chunks.push(chunk);
+    logVoice("session.chunk", {
+      sessionId,
+      mimeType,
+      chunkBytes: chunk.length,
+      totalChunks: session.chunks.length,
+    });
+    res.json({ ok: true });
+  });
+
+  app.post("/api/voice/session/stop", async (req, res) => {
+    const sessionId =
+      typeof req.body?.sessionId === "string" ? req.body.sessionId : "";
+    const session = voiceSessions.get(sessionId);
+    if (!session) {
+      logVoice("session.stop.missing", { sessionId });
+      res.status(404).json({ error: "voice session not found" });
+      return;
+    }
+
+    voiceSessions.delete(sessionId);
+    const buffer = Buffer.concat(session.chunks);
+    logVoice("session.stop", {
+      sessionId,
+      chunks: session.chunks.length,
+      totalBytes: buffer.length,
+      mimeType: session.mimeType,
+      ageMs: Date.now() - session.createdAt,
+    });
+    if (buffer.length === 0) {
+      logVoice("session.stop.empty_audio", { sessionId });
+      res.json({ transcript: "" });
+      return;
+    }
+
+    try {
+      const transcript = await transcribeLocalAudioFromBuffer(buffer);
+      logVoice("session.stop.transcript", {
+        sessionId,
+        transcriptChars: transcript.length,
+        transcriptPreview: transcript.slice(0, 200),
+      });
+      res.json({ transcript });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "voice transcription failed";
+      logVoice("session.stop.error", {
+        sessionId,
+        message,
+      });
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.post("/api/voice/process", async (req, res) => {
+    logVoice("process.request.received", {
+      method: req.method,
+      hasBody: Boolean(req.body),
+      queryPath:
+        typeof req.query.path === "string" ? req.query.path : undefined,
+      bodyPath: typeof req.body?.path === "string" ? req.body.path : undefined,
+      bodyProjectPath:
+        typeof req.body?.projectPath === "string"
+          ? req.body.projectPath
+          : undefined,
+    });
+    const target = markdownPathFromRequest(req, res);
+    if (!target) {
+      logVoice("process.request.rejected.invalid_target", {
+        reason: "markdownPathFromRequest returned null",
+      });
+      return;
+    }
+    logVoice("process.request.target", {
+      relativePath: target.relativePath,
+      projectDir: target.projectDir,
+      absolutePath: target.absolutePath,
+    });
+
+    const payload = req.body as VoiceProcessPayload;
+    const utterance =
+      typeof payload.utterance === "string" ? payload.utterance.trim() : "";
+    const selection = payload.selection;
+    const selectedText =
+      typeof selection?.selectedText === "string"
+        ? selection.selectedText.trim()
+        : "";
+
+    if (!utterance) {
+      logVoice("process.request.rejected.empty_utterance", {
+        utteranceType: typeof payload.utterance,
+      });
+      res.status(400).json({ error: "utterance is required" });
+      return;
+    }
+
+    if (!selectedText) {
+      logVoice("process.request.rejected.empty_selection", {
+        selectionType: typeof selection,
+        selectedTextType: typeof selection?.selectedText,
+      });
+      res.status(400).json({ error: "selection.selectedText is required" });
+      return;
+    }
+
+    logVoice("process.request.validated", {
+      utteranceChars: utterance.length,
+      utterancePreview: utterance.slice(0, 200),
+      selectionChars: selectedText.length,
+      selectionPreview: selectedText.slice(0, 200),
+      selectionFrom:
+        typeof selection?.from === "number" ? selection.from : undefined,
+      selectionTo: typeof selection?.to === "number" ? selection.to : undefined,
+    });
+
+    try {
+      const startedAt = Date.now();
+      const action = await inferVoiceActionWithOpenRouter(
+        utterance,
+        selectedText,
+        fetchImpl,
+      );
+      logVoice("process.response.success", {
+        durationMs: Date.now() - startedAt,
+        action: action.action,
+        confidence: action.confidence,
+        uncertain: action.uncertain === true,
+        contentChars: action.content.length,
+        contentPreview: action.content.slice(0, 200),
+        replacementChars: action.replacementText?.length ?? 0,
+        replacementPreview: action.replacementText?.slice(0, 200),
+      });
+      res.json(action);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "voice processing failed";
+      logVoice("process.response.error", {
+        message,
+      });
+      res.status(500).json({ error: message });
+    }
   });
 
   app.put("/api/pages/:id", (req, res) => {
@@ -1231,6 +1792,21 @@ export async function createServer(
     projectDir,
     remoteDocumentToken:
       remoteDocumentToken.length > 0 ? remoteDocumentToken : undefined,
+  });
+  const startupKeySummary = summarizeApiKey(
+    process.env[ROUGHDRAFT_OPENROUTER_API_KEY_ENV],
+  );
+  logVoice("server.env.voice", {
+    cwd: process.cwd(),
+    envModelRaw: process.env[ROUGHDRAFT_LLM_MODEL_ENV] ?? null,
+    envModelEffective:
+      process.env[ROUGHDRAFT_LLM_MODEL_ENV]?.trim() || DEFAULT_VOICE_MODEL,
+    envApiKeyPresent: startupKeySummary.present,
+    envApiKeyPrefix: startupKeySummary.prefix,
+    envApiKeyLength: startupKeySummary.length,
+    envVoiceModelDir: process.env[ROUGHDRAFT_VOICE_MODEL_DIR_ENV] ?? null,
+    envVoiceTranscribeCommand:
+      process.env[ROUGHDRAFT_VOICE_TRANSCRIBE_COMMAND_ENV] ?? null,
   });
   const listeningHosts: string[] = [];
 

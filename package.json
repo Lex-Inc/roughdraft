@@ -41,6 +41,7 @@
   ],
   "dependencies": {
     "@roughdraft/rfm": "file:packages/rfm",
+    "dotenv": "17.4.2",
     "express": "^5.1.0"
   },
   "devDependencies": {
