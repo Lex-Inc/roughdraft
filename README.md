@@ -106,6 +106,13 @@ The MCP server exposes tools to read the review index, list pending feedback, wa
 ./scripts/run.sh
 ```
 
+Create local env config before starting the CLI/server:
+
+```bash
+cp .env.example .env
+# edit .env and set required values (for example ROUGHDRAFT_OPENROUTER_API_KEY)
+```
+
 `./scripts/setup.sh` installs workspace dependencies and builds the app and server. `./scripts/run.sh` serves the built app at `http://localhost:7373`.
 
 The two scripts coordinate through a lock file, so it's safe to start `./scripts/run.sh` while `./scripts/setup.sh` is still in progress. `run` will wait for setup to finish, or trigger setup itself if nothing has been built yet.
@@ -218,6 +225,8 @@ roughdraft doctor ./draft.md --json
 
 Usage errors return exit code `2`. Runtime failures return exit code `1`. `roughdraft status --json` returns exit code `0` even when the JSON says `"running": false`.
 
+Roughdraft automatically loads environment variables from `.env` in the current working directory. If `.env.local` exists, it is loaded after `.env` and overrides duplicate keys.
+
 Supported environment variables:
 
 ```text
@@ -235,6 +244,24 @@ ROUGHDRAFT_STATE_FILE
 
 ROUGHDRAFT_STATE_DIR
   Directory containing server.json.
+
+ROUGHDRAFT_LOG_FILE
+  Optional absolute path for background server logs. Defaults to
+  `<state-dir>/server.log`.
+
+ROUGHDRAFT_OPENROUTER_API_KEY
+  API key used by /api/voice/process to infer comment vs suggestion actions.
+
+ROUGHDRAFT_LLM_MODEL
+  Optional OpenRouter model override for voice-action inference.
+
+ROUGHDRAFT_VOICE_TRANSCRIBE_COMMAND
+  Local transcription command template used by `/api/voice/session/stop`.
+  Supported placeholders: `{audio}`, `{output}`, `{model}`.
+
+ROUGHDRAFT_VOICE_MODEL_DIR
+  Optional model directory used to resolve `{model}`. Defaults to
+  `~/Library/Application Support/com.prakashjoshipax.VoiceInk/WhisperModels`.
 ```
 
 Development-only environment variables:

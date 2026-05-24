@@ -36,6 +36,26 @@ export interface ReviewWatchStatus {
   watcherCount: number;
 }
 
+export interface VoiceSelectionSnapshot {
+  from: number;
+  to: number;
+  selectedText: string;
+}
+
+export type VoiceActionType =
+  | "comment"
+  | "suggestion_addition"
+  | "suggestion_deletion"
+  | "suggestion_substitution";
+
+export interface VoiceActionResult {
+  action: VoiceActionType;
+  content: string;
+  replacementText?: string;
+  confidence: number;
+  uncertain?: boolean;
+}
+
 export interface BackendInfo {
   kind: "local-files" | "local-storage" | "remote";
   label: string;
@@ -60,6 +80,11 @@ export interface StorageBackend {
   ): () => void;
   completeReview?(relativePath: string): Promise<CompleteReviewResult>;
   getReviewWatchStatus?(relativePath: string): Promise<ReviewWatchStatus>;
+  processVoiceUtterance?(
+    relativePath: string,
+    utterance: string,
+    selection: VoiceSelectionSnapshot,
+  ): Promise<VoiceActionResult>;
   saveAsset(file: File): Promise<StoredAsset>;
   resolveFileUrl(path: string): string | null;
   openProject(path: string): Promise<void>;

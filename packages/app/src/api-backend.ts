@@ -7,6 +7,8 @@ import {
   type ReviewWatchStatus,
   type StorageBackend,
   type StoredAsset,
+  type VoiceActionResult,
+  type VoiceSelectionSnapshot,
 } from "./storage";
 
 export class ApiBackend implements StorageBackend {
@@ -153,6 +155,31 @@ export class ApiBackend implements StorageBackend {
       watcherCount:
         typeof payload.watcherCount === "number" ? payload.watcherCount : 0,
     };
+  }
+
+  async processVoiceUtterance(
+    relativePath: string,
+    utterance: string,
+    selection: VoiceSelectionSnapshot,
+  ): Promise<VoiceActionResult> {
+    const res = await fetch(this.buildUrl("/api/voice/process"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        projectPath: this.info.projectPath,
+        path: relativePath,
+        utterance,
+        selection,
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error(
+        `Failed to process voice utterance for ${relativePath}: ${res.status}`,
+      );
+    }
+
+    return res.json();
   }
 
   async saveAsset(file: File): Promise<StoredAsset> {

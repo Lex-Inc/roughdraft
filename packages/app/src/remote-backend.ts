@@ -5,6 +5,8 @@ import {
   type Page,
   type StorageBackend,
   type StoredAsset,
+  type VoiceActionResult,
+  type VoiceSelectionSnapshot,
 } from "./storage";
 
 interface RemoteDocumentPayload {
@@ -228,6 +230,19 @@ export class RemoteBackend implements StorageBackend {
     throw new Error(
       "Remote document sessions do not support asset uploads in this version.",
     );
+  }
+
+  async processVoiceUtterance(
+    _relativePath: string,
+    utterance: string,
+    _selection: VoiceSelectionSnapshot,
+  ): Promise<VoiceActionResult> {
+    return {
+      action: "comment",
+      content: utterance.trim(),
+      confidence: 0.3,
+      uncertain: true,
+    };
   }
 
   resolveFileUrl(_path: string): string | null {

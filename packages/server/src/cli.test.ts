@@ -9,6 +9,7 @@ import {
   createCliDependencies,
   createDefaultOpenUrl,
   ensureServerRunning,
+  getServerLogFilePath,
   getServerStateFilePath,
   runCli,
 } from "./cli";
@@ -896,12 +897,14 @@ describe("cli", () => {
     const payload = parseOnlyJsonLog<{
       running: boolean;
       stateFile: string;
+      logFile: string;
     }>(test.logs);
 
     expect(exitCode).toBe(0);
     expect(payload).toEqual({
       running: false,
       stateFile: getServerStateFilePath(test.deps.env),
+      logFile: getServerLogFilePath(test.deps.env),
     });
   });
 
@@ -917,6 +920,7 @@ describe("cli", () => {
       pid: number;
       startedAt: string;
       stateFile: string;
+      logFile: string;
       managed: boolean;
     }>(test.logs);
 
@@ -928,6 +932,7 @@ describe("cli", () => {
       pid: result.server.pid,
       startedAt: result.server.startedAt,
       stateFile: getServerStateFilePath(test.deps.env),
+      logFile: getServerLogFilePath(test.deps.env),
       managed: true,
     });
   });

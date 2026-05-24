@@ -4,7 +4,7 @@ import { TextSelection } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-
+import { buildLocationForLinkedMarkdownDocument } from "./app-navigation";
 import { CommentEditorList } from "./CommentEditorList";
 import {
   type CriticChangeAttrs,
@@ -30,9 +30,13 @@ import {
 } from "./editor-extensions";
 import { cn } from "./lib/utils";
 import { MarkdownCodeEditor } from "./MarkdownCodeEditor";
-import { buildLocationForLinkedMarkdownDocument } from "./app-navigation";
 import { toHtml } from "./markdown";
-import type { Page, StorageBackend } from "./storage";
+import type {
+  Page,
+  StorageBackend,
+  VoiceActionResult,
+  VoiceSelectionSnapshot,
+} from "./storage";
 import { useCommentAnchorLayout } from "./useCommentAnchorLayout";
 
 export type DocumentSaveState = "saved" | "unsaved" | "saving" | "error";
@@ -48,6 +52,12 @@ export interface DocumentSaveController {
 
 type EditorViewMode = "rich-text" | "code";
 export type DocumentInteractionMode = "viewing" | "suggesting" | "editing";
+type VoiceProgressStage =
+  | "transcribing"
+  | "processing"
+  | "editing"
+  | "done"
+  | "error";
 
 interface PageCardProps {
   page: Page;
@@ -103,12 +113,112 @@ interface RichTextEditorSurfaceProps {
   onCommentRailPresenceChange?: (hasCommentRailSpace: boolean) => void;
 }
 
+interface VoiceCaptureContext {
+  runId: number;
+  selection: VoiceSelectionSnapshot | null;
+  chunks: Blob[];
+  startedAtMs: number;
+  shouldTranscribe: boolean;
+}
+
 interface CodeEditorSurfaceProps {
   markdown: string;
   hasCommentRailSpace: boolean;
   interactionMode: DocumentInteractionMode;
   layout: "default" | "embedded-demo";
   onMarkdownChange: (markdown: string) => void;
+}
+
+function audioBufferToWavBlob(audioBuffer: AudioBuffer): Blob {
+  const channels = audioBuffer.numberOfChannels;
+  const sampleRate = audioBuffer.sampleRate;
+  const length = audioBuffer.length;
+  const bytesPerSample = 2;
+  const blockAlign = channels * bytesPerSample;
+  const dataSize = length * blockAlign;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  const writeString = (offset: number, text: string) => {
+    for (let index = 0; index < text.length; index += 1) {
+      view.setUint8(offset + index, text.charCodeAt(index));
+    }
+  };
+
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true);
+  writeString(36, "data");
+  view.setUint32(40, dataSize, true);
+
+  let offset = 44;
+  for (let frame = 0; frame < length; frame += 1) {
+    for (let channel = 0; channel < channels; channel += 1) {
+      const sample = audioBuffer.getChannelData(channel)[frame] ?? 0;
+      const clamped = Math.max(-1, Math.min(1, sample));
+      const int16 = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
+      view.setInt16(offset, int16, true);
+      offset += 2;
+    }
+  }
+
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+function audioBufferRms(audioBuffer: AudioBuffer): number {
+  let sumSquares = 0;
+  let sampleCount = 0;
+  for (let channel = 0; channel < audioBuffer.numberOfChannels; channel += 1) {
+    const data = audioBuffer.getChannelData(channel);
+    for (let index = 0; index < data.length; index += 1) {
+      const sample = data[index] ?? 0;
+      sumSquares += sample * sample;
+      sampleCount += 1;
+    }
+  }
+  if (sampleCount === 0) return 0;
+  return Math.sqrt(sumSquares / sampleCount);
+}
+
+function shouldIgnoreUtterance(utterance: string): boolean {
+  const normalized = utterance
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return true;
+
+  const fillerPhrases = new Set([
+    "thank you",
+    "thanks",
+    "okay",
+    "ok",
+    "all right",
+    "alright",
+    "oh my god",
+    "wow",
+    "hmm",
+    "um",
+    "uh",
+  ]);
+  if (fillerPhrases.has(normalized)) return true;
+
+  const hasEditIntent =
+    /\b(delete|remove|replace|rewrite|reword|change|add|insert|move|cut|shorten|expand|merge|split|fix)\b/.test(
+      normalized,
+    );
+  const words = normalized.split(" ").filter(Boolean);
+  if (!hasEditIntent && words.length <= 2) return true;
+
+  return false;
 }
 
 export interface DraftSuggestionState {
@@ -623,6 +733,28 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
   const [pendingFocusCommentId, setPendingFocusCommentId] = useState<
     string | null
   >(null);
+  const [voiceStatus, setVoiceStatus] = useState<
+    "idle" | "recording" | "processing" | "paused" | "error"
+  >("idle");
+  const [voiceStatusMessage, setVoiceStatusMessage] = useState<string>("");
+  const [voiceProgress, setVoiceProgress] = useState<{
+    runId: number;
+    stage: VoiceProgressStage;
+    message: string;
+  } | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const voiceSelectionRef = useRef<VoiceSelectionSnapshot | null>(null);
+  const voicePinnedSelectionRef = useRef<VoiceSelectionSnapshot | null>(null);
+  const shouldRecordVoiceRef = useRef(false);
+  const voiceAppendTargetBySelectionRef = useRef<Map<string, string>>(
+    new Map(),
+  );
+  const voiceProgressRunRef = useRef(0);
+  const voiceCaptureContextRef = useRef<VoiceCaptureContext | null>(null);
+  const applyVoiceActionRef = useRef<
+    (selection: VoiceSelectionSnapshot, action: VoiceActionResult) => void
+  >(() => {});
 
   const resolveFileUrl = useCallback(
     (path: string) => backend.resolveFileUrl(path),
@@ -713,6 +845,23 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
     },
     [backend, resolveFileUrl, resolveLinkUrl],
   );
+
+  const getSelectionSnapshot = useCallback(
+    (currentEditor: Editor): VoiceSelectionSnapshot | null => {
+      const { from, to, empty } = currentEditor.state.selection;
+      if (empty || from === to) return null;
+      const selectedText = currentEditor.state.doc
+        .textBetween(from, to, "\n")
+        .trim();
+      if (!selectedText) return null;
+      return { from, to, selectedText };
+    },
+    [],
+  );
+
+  const selectionKey = useCallback((selection: VoiceSelectionSnapshot) => {
+    return `${selection.from}:${selection.to}:${selection.selectedText}`;
+  }, []);
 
   const refreshCriticChanges = useCallback(() => {
     if (criticChangeFrameRef.current != null) {
@@ -1228,9 +1377,432 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
   selectedCommentIdRef.current = selectedCommentId;
   selectedChangeIdRef.current = selectedChangeId;
 
+  const processVoiceUtterance = useCallback(
+    async (
+      utterance: string,
+      runId: number,
+      targetSelection: VoiceSelectionSnapshot | null,
+    ) => {
+      const normalizedUtterance = utterance.trim();
+      if (shouldIgnoreUtterance(normalizedUtterance)) {
+        setVoiceProgress({
+          runId,
+          stage: "done",
+          message: "No actionable feedback detected.",
+        });
+        window.setTimeout(() => {
+          setVoiceProgress((current) =>
+            current?.runId === runId ? null : current,
+          );
+        }, 900);
+        return;
+      }
+      if (
+        !backend.processVoiceUtterance ||
+        !activeDocumentPath ||
+        !targetSelection ||
+        normalizedUtterance.length === 0
+      ) {
+        return;
+      }
+
+      setVoiceStatus("processing");
+      setVoiceProgress({
+        runId,
+        stage: "processing",
+        message: "Processing feedback...",
+      });
+      try {
+        const action = await backend.processVoiceUtterance(
+          activeDocumentPath,
+          normalizedUtterance,
+          targetSelection,
+        );
+        setVoiceProgress({
+          runId,
+          stage: "editing",
+          message: "Applying comment or suggestion...",
+        });
+        applyVoiceActionRef.current(targetSelection, action);
+        setVoiceStatus(shouldRecordVoiceRef.current ? "recording" : "paused");
+        setVoiceProgress({
+          runId,
+          stage: "done",
+          message: "Feedback added.",
+        });
+        window.setTimeout(() => {
+          setVoiceProgress((current) =>
+            current?.runId === runId ? null : current,
+          );
+        }, 1400);
+      } catch (error) {
+        setVoiceStatus("error");
+        const message =
+          error instanceof Error ? error.message : "Voice processing failed";
+        setVoiceStatusMessage(message);
+        setVoiceProgress({
+          runId,
+          stage: "error",
+          message: `Voice feedback failed: ${message}`,
+        });
+      }
+    },
+    [activeDocumentPath, backend],
+  );
+
+  const flushRecordedAudio = useCallback(
+    async (
+      chunks: Blob[],
+      runId: number,
+      targetSelection: VoiceSelectionSnapshot | null,
+    ) => {
+    if (chunks.length === 0) return;
+    setVoiceProgress({
+      runId,
+      stage: "transcribing",
+      message: "Transcribing audio...",
+    });
+
+    const originalBlob = new Blob(chunks, {
+      type: chunks[0]?.type || "audio/webm",
+    });
+    let uploadBlob = originalBlob;
+    try {
+      const context = new AudioContext();
+      const decoded = await context.decodeAudioData(
+        await originalBlob.arrayBuffer(),
+      );
+      const rms = audioBufferRms(decoded);
+      if (rms < 0.0035) {
+        await context.close();
+        setVoiceProgress({
+          runId,
+          stage: "done",
+          message: "No speech detected.",
+        });
+        window.setTimeout(() => {
+          setVoiceProgress((current) =>
+            current?.runId === runId ? null : current,
+          );
+        }, 900);
+        return;
+      }
+      uploadBlob = audioBufferToWavBlob(decoded);
+      await context.close();
+    } catch {
+      uploadBlob = originalBlob;
+    }
+
+    const buffer = await uploadBlob.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let index = 0; index < bytes.length; index += 1) {
+      const byte = bytes[index];
+      if (byte !== undefined) {
+        binary += String.fromCharCode(byte);
+      }
+    }
+
+    const startResponse = await fetch("/api/voice/session/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    if (!startResponse.ok) {
+      setVoiceProgress({
+        runId,
+        stage: "error",
+        message: "Voice feedback failed: unable to start transcription.",
+      });
+      return;
+    }
+    const startPayload = (await startResponse.json()) as { sessionId?: string };
+    const sessionId = startPayload.sessionId;
+    if (!sessionId) {
+      setVoiceProgress({
+        runId,
+        stage: "error",
+        message: "Voice feedback failed: missing transcription session.",
+      });
+      return;
+    }
+
+    const chunkResponse = await fetch("/api/voice/session/chunk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        mimeType: uploadBlob.type || "audio/webm",
+        audioBase64: btoa(binary),
+      }),
+    });
+    if (!chunkResponse.ok) {
+      setVoiceProgress({
+        runId,
+        stage: "error",
+        message: "Voice feedback failed: upload error.",
+      });
+      return;
+    }
+
+    const stopResponse = await fetch("/api/voice/session/stop", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId }),
+    });
+    if (!stopResponse.ok) {
+      setVoiceProgress({
+        runId,
+        stage: "error",
+        message: "Voice feedback failed: transcription stop error.",
+      });
+      return;
+    }
+    const stopPayload = (await stopResponse.json()) as { transcript?: string };
+    const transcript = stopPayload.transcript?.trim() ?? "";
+    if (transcript.length > 0) {
+      await processVoiceUtterance(transcript, runId, targetSelection);
+    } else {
+      setVoiceProgress({
+        runId,
+        stage: "done",
+        message: "No speech detected.",
+      });
+      window.setTimeout(() => {
+        setVoiceProgress((current) =>
+          current?.runId === runId ? null : current,
+        );
+      }, 1400);
+    }
+    },
+    [processVoiceUtterance],
+  );
+
+  const stopVoiceCapture = useCallback((cancel = false) => {
+    shouldRecordVoiceRef.current = false;
+    const recorder = mediaRecorderRef.current;
+    const captureContext = voiceCaptureContextRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      if (cancel && captureContext) {
+        captureContext.shouldTranscribe = false;
+      }
+      const runId = captureContext?.runId ?? ++voiceProgressRunRef.current;
+      if (captureContext && !cancel) {
+        const elapsedMs = Date.now() - captureContext.startedAtMs;
+        if (elapsedMs < 450) {
+          captureContext.shouldTranscribe = false;
+          setVoiceProgress({
+            runId,
+            stage: "done",
+            message: "No speech detected.",
+          });
+          window.setTimeout(() => {
+            setVoiceProgress((current) =>
+              current?.runId === runId ? null : current,
+            );
+          }, 900);
+        } else {
+          setVoiceProgress({
+            runId,
+            stage: "transcribing",
+            message: "Transcribing audio...",
+          });
+        }
+      }
+      if (cancel) {
+        setVoiceProgress(null);
+      }
+      recorder.requestData();
+      recorder.stop();
+    }
+    mediaRecorderRef.current = null;
+    voiceCaptureContextRef.current = null;
+    if (mediaStreamRef.current) {
+      for (const track of mediaStreamRef.current.getTracks()) {
+        track.stop();
+      }
+      mediaStreamRef.current = null;
+    }
+    voicePinnedSelectionRef.current = null;
+    setVoiceStatus("idle");
+  }, [flushRecordedAudio]);
+
+  const ensureVoiceCapture = useCallback(() => {
+    if (mediaRecorderRef.current || !shouldRecordVoiceRef.current) return;
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      setVoiceStatus("error");
+      setVoiceStatusMessage(
+        "Local audio capture is unavailable in this browser.",
+      );
+      return;
+    }
+    void navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((stream) => {
+        if (!shouldRecordVoiceRef.current) {
+          for (const track of stream.getTracks()) {
+            track.stop();
+          }
+          return;
+        }
+        mediaStreamRef.current = stream;
+        const recorder = new MediaRecorder(stream);
+        const recorderChunks: Blob[] = [];
+        const recordingSelection = voicePinnedSelectionRef.current;
+        const runId = ++voiceProgressRunRef.current;
+        const captureContext: VoiceCaptureContext = {
+          runId,
+          selection: recordingSelection,
+          chunks: recorderChunks,
+          startedAtMs: Date.now(),
+          shouldTranscribe: true,
+        };
+        voiceCaptureContextRef.current = captureContext;
+        recorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            recorderChunks.push(event.data);
+          }
+        };
+        recorder.onerror = () => {
+          setVoiceStatus("error");
+          setVoiceStatusMessage("Microphone recording error.");
+        };
+        recorder.onstop = () => {
+          if (!captureContext.shouldTranscribe) return;
+          void flushRecordedAudio(
+            captureContext.chunks,
+            captureContext.runId,
+            captureContext.selection,
+          );
+        };
+        mediaRecorderRef.current = recorder;
+        recorder.start();
+        setVoiceStatus("recording");
+      })
+      .catch((error: unknown) => {
+        setVoiceStatus("error");
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Microphone permission denied.";
+        setVoiceStatusMessage(message);
+      });
+  }, [flushRecordedAudio]);
+
   useEffect(() => {
     editor?.setEditable(interactionMode !== "viewing", false);
   }, [editor, interactionMode]);
+
+  useEffect(() => {
+    if (!editor || interactionMode === "viewing") {
+      stopVoiceCapture();
+      voiceSelectionRef.current = null;
+      return;
+    }
+
+    const handleSelectionChange = () => {
+      const currentEditor = editorRef.current;
+      if (!currentEditor) return;
+      const snapshot = getSelectionSnapshot(currentEditor);
+      if (!snapshot) {
+        voiceSelectionRef.current = null;
+        shouldRecordVoiceRef.current = false;
+        setVoiceStatus("paused");
+        const captureContext = voiceCaptureContextRef.current;
+        if (captureContext) {
+          const elapsedMs = Date.now() - captureContext.startedAtMs;
+          if (elapsedMs < 450) {
+            captureContext.shouldTranscribe = false;
+            setVoiceProgress({
+              runId: captureContext.runId,
+              stage: "done",
+              message: "No speech detected.",
+            });
+            window.setTimeout(() => {
+              setVoiceProgress((current) =>
+                current?.runId === captureContext.runId ? null : current,
+              );
+            }, 900);
+          } else {
+            setVoiceProgress({
+              runId: captureContext.runId,
+              stage: "transcribing",
+              message: "Transcribing audio...",
+            });
+          }
+        }
+        const recorder = mediaRecorderRef.current;
+        if (recorder && recorder.state !== "inactive") {
+          recorder.requestData();
+          recorder.stop();
+        }
+        mediaRecorderRef.current = null;
+        voiceCaptureContextRef.current = null;
+        if (mediaStreamRef.current) {
+          for (const track of mediaStreamRef.current.getTracks()) {
+            track.stop();
+          }
+          mediaStreamRef.current = null;
+        }
+        return;
+      }
+
+      voiceSelectionRef.current = snapshot;
+      voicePinnedSelectionRef.current = snapshot;
+      if (voiceCaptureContextRef.current) {
+        voiceCaptureContextRef.current.selection = snapshot;
+      }
+      shouldRecordVoiceRef.current = true;
+      ensureVoiceCapture();
+      setVoiceStatusMessage("");
+    };
+
+    editor.on("selectionUpdate", handleSelectionChange);
+    handleSelectionChange();
+
+    return () => {
+      editor.off("selectionUpdate", handleSelectionChange);
+    };
+  }, [
+    editor,
+    ensureVoiceCapture,
+    getSelectionSnapshot,
+    interactionMode,
+    stopVoiceCapture,
+  ]);
+
+  useEffect(() => {
+    const handleHandoff = () => {
+      stopVoiceCapture();
+    };
+    window.addEventListener("roughdraft:review-handoff", handleHandoff);
+    return () => {
+      window.removeEventListener("roughdraft:review-handoff", handleHandoff);
+    };
+  }, [stopVoiceCapture]);
+
+  useEffect(() => {
+    if (!editor || interactionMode === "viewing") return;
+
+    const handleEscapeToCancelVoice = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const currentEditor = editorRef.current;
+      if (!currentEditor) return;
+
+      stopVoiceCapture(true);
+      const { to } = currentEditor.state.selection;
+      currentEditor.chain().setTextSelection({ from: to, to }).run();
+    };
+
+    window.addEventListener("keydown", handleEscapeToCancelVoice);
+    return () => {
+      window.removeEventListener("keydown", handleEscapeToCancelVoice);
+    };
+  }, [editor, interactionMode, stopVoiceCapture]);
 
   const activeCommentIds =
     useEditorState({
@@ -1257,6 +1829,12 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
       onEditorReady?.(null);
     };
   }, [editor, onEditorReady]);
+
+  useEffect(() => {
+    return () => {
+      stopVoiceCapture();
+    };
+  }, [stopVoiceCapture]);
 
   useEffect(() => {
     setSelectedCommentId((current) =>
@@ -1490,6 +2068,139 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
       measureLayout();
     });
   }, [measureLayout]);
+
+  const applyVoiceAction = useCallback(
+    (selection: VoiceSelectionSnapshot, action: VoiceActionResult) => {
+      const currentEditor = editorRef.current;
+      if (!currentEditor) return;
+      const tr = currentEditor.state.tr;
+
+      const key = selectionKey(selection);
+      const existingTarget = voiceAppendTargetBySelectionRef.current.get(key);
+
+      if (action.action === "comment" || action.uncertain) {
+        if (existingTarget) {
+          const existingComment = commentsRef.current.get(existingTarget);
+          if (existingComment) {
+            const nextComments = new Map(commentsRef.current);
+            nextComments.set(existingTarget, {
+              ...existingComment,
+              content: `${existingComment.content}\n${action.content}`.trim(),
+            });
+            commentsRef.current = nextComments;
+            setComments(nextComments);
+            emitMarkdownChange(currentEditor.getJSON(), nextComments);
+          }
+          return;
+        }
+
+        const comment = createCriticComment(
+          {
+            authorType: "user",
+            authorId: "user",
+            content: action.uncertain
+              ? `[uncertain] ${action.content}`
+              : action.content,
+          },
+          {
+            existingComments: commentsRef.current.values(),
+          },
+        );
+        const nextComments = new Map(commentsRef.current);
+        nextComments.set(comment.id, comment);
+        commentsRef.current = nextComments;
+        setComments(nextComments);
+
+        suppressNextMarkdownUpdateRef.current = true;
+        const commentMarkType = currentEditor.state.schema.marks.commentRef;
+        if (!commentMarkType) return;
+        tr.addMark(
+          selection.from,
+          selection.to,
+          commentMarkType.create({ commentIds: [comment.id] }),
+        );
+        currentEditor.view.dispatch(tr);
+        if (suppressNextMarkdownUpdateRef.current) {
+          suppressNextMarkdownUpdateRef.current = false;
+        }
+        voiceAppendTargetBySelectionRef.current.set(key, comment.id);
+        emitMarkdownChange(currentEditor.getJSON(), nextComments);
+        return;
+      }
+
+      if (action.action === "suggestion_addition") {
+        const change = createCriticChange(
+          "addition",
+          { authorType: "user", authorId: "user" },
+          {
+            existingChanges: getDocumentCriticChanges(currentEditor),
+          },
+        );
+        const criticMarkType = currentEditor.state.schema.marks.criticChange;
+        if (!criticMarkType) return;
+        tr.insertText(action.content, selection.to);
+        tr.addMark(
+          selection.to,
+          selection.to + action.content.length,
+          criticMarkType.create(change),
+        );
+        currentEditor.view.dispatch(tr);
+        emitMarkdownChange(currentEditor.getJSON());
+        refreshCriticChanges();
+        return;
+      }
+
+      if (action.action === "suggestion_deletion") {
+        const change = createCriticChange(
+          "deletion",
+          { authorType: "user", authorId: "user" },
+          {
+            existingChanges: getDocumentCriticChanges(currentEditor),
+          },
+        );
+        const criticMarkType = currentEditor.state.schema.marks.criticChange;
+        if (!criticMarkType) return;
+        tr.addMark(selection.from, selection.to, criticMarkType.create(change));
+        currentEditor.view.dispatch(tr);
+        emitMarkdownChange(currentEditor.getJSON());
+        refreshCriticChanges();
+        return;
+      }
+
+      const replacementText =
+        action.replacementText && action.replacementText.trim().length > 0
+          ? action.replacementText
+          : action.content;
+      const change = createCriticChange(
+        "substitution-old",
+        { authorType: "user", authorId: "user" },
+        {
+          existingChanges: getDocumentCriticChanges(currentEditor),
+        },
+      );
+      const replacementChange: CriticChangeAttrs = {
+        ...change,
+        kind: "substitution-new",
+      };
+      const criticMarkType = currentEditor.state.schema.marks.criticChange;
+      if (!criticMarkType) return;
+      tr.addMark(selection.from, selection.to, criticMarkType.create(change));
+      tr.insertText(replacementText, selection.to);
+      tr.addMark(
+        selection.to,
+        selection.to + replacementText.length,
+        criticMarkType.create(replacementChange),
+      );
+      currentEditor.view.dispatch(tr);
+      emitMarkdownChange(currentEditor.getJSON());
+      refreshCriticChanges();
+    },
+    [emitMarkdownChange, refreshCriticChanges, selectionKey],
+  );
+
+  useEffect(() => {
+    applyVoiceActionRef.current = applyVoiceAction;
+  }, [applyVoiceAction]);
 
   const handleSuggestDeletion = useCallback(() => {
     const currentEditor = editorRef.current;
@@ -1923,6 +2634,36 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
               data-testid="document-content-card"
               className={cn(contentCardClass, "px-10 py-10 sm:px-14 sm:py-14")}
             >
+              {interactionMode !== "viewing" && voiceStatus === "recording" ? (
+                <div
+                  data-testid="voice-review-status"
+                  className="pointer-events-none fixed bottom-6 left-1/2 z-50 inline-flex -translate-x-1/2 items-center gap-2 rounded-full border border-stone-300 bg-stone-50/95 px-4 py-2 text-xs text-stone-700 shadow-md backdrop-blur dark:border-slate-600 dark:bg-slate-800/95 dark:text-slate-200"
+                >
+                  <span
+                    className={cn(
+                      "size-2 rounded-full bg-stone-400",
+                      voiceStatus === "recording" && "bg-red-500",
+                    )}
+                  />
+                  <span className="font-medium">
+                    Voice: {voiceStatus}
+                    {voiceStatusMessage ? ` (${voiceStatusMessage})` : ""}
+                  </span>
+                </div>
+              ) : null}
+              {voiceProgress ? (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  data-testid="voice-review-progress-toast"
+                  className="pointer-events-none fixed bottom-6 right-6 z-50 max-w-sm rounded-lg border border-stone-300 bg-white/95 px-4 py-3 text-sm text-stone-900 shadow-lg backdrop-blur dark:border-slate-600 dark:bg-slate-900/95 dark:text-slate-100"
+                >
+                  <div className="font-medium">{voiceProgress.message}</div>
+                  <div className="mt-1 text-xs uppercase tracking-wide text-stone-500 dark:text-slate-400">
+                    {voiceProgress.stage}
+                  </div>
+                </div>
+              ) : null}
               <EditorContextMenu
                 editor={editor}
                 backend={backend}
