@@ -2,6 +2,12 @@ import { generateJSON, type JSONContent } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { parseHTML } from "linkedom";
 import type { CriticComment } from "../critic-markup";
+import {
+  appendHtmlReply,
+  extractHtmlReviewIndex,
+  markHtmlResolved,
+  validateHtmlReview,
+} from "./html-review";
 import type {
   EditorState,
   FormatAdapter,
@@ -121,20 +127,20 @@ export const htmlAdapter: FormatAdapter = {
     return data.preamble + data.rawBody + data.postamble;
   },
 
-  validateReview(_content: string): ValidationResult {
-    throw new Error("htmlAdapter.validateReview not implemented");
+  validateReview(content: string): ValidationResult {
+    return validateHtmlReview(content);
   },
 
-  extractReviewIndex(_content: string): ReviewIndex {
-    throw new Error("htmlAdapter.extractReviewIndex not implemented");
+  extractReviewIndex(content: string): ReviewIndex {
+    return extractHtmlReviewIndex(content);
   },
 
-  appendReply(_content: string, _options: ReplyOptions): string {
-    throw new Error("htmlAdapter.appendReply not implemented");
+  appendReply(content: string, options: ReplyOptions): string {
+    return appendHtmlReply(content, options);
   },
 
-  markResolved(_content: string, _options: ResolveOptions): string {
-    throw new Error("htmlAdapter.markResolved not implemented");
+  markResolved(content: string, options: ResolveOptions): string {
+    return markHtmlResolved(content, options);
   },
 
   extractTitle(content: string): string | null {

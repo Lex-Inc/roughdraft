@@ -1,3 +1,4 @@
+export { htmlAdapter } from "./html-adapter";
 export { markdownAdapter } from "./markdown-adapter";
 export type {
   EditorState,

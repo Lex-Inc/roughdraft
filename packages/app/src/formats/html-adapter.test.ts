@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
 import { htmlAdapter } from "./html-adapter";
 
@@ -53,6 +54,77 @@ describe("htmlAdapter — comments", () => {
     const input = readFixture("with-review.html");
     const output = htmlAdapter.serialize(htmlAdapter.parse(input));
     expect(output).toBe(input);
+  });
+});
+
+describe("htmlAdapter — validateReview", () => {
+  it("accepts a well-formed review", () => {
+    const result = htmlAdapter.validateReview(readFixture("with-review.html"));
+    expect(result.ok).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it("flags duplicate data-rd-id values", () => {
+    const html =
+      '<!doctype html><html><body><mark data-rd-id="h1">a</mark><mark data-rd-id="h1">b</mark></body></html>';
+    const result = htmlAdapter.validateReview(html);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === "duplicate-id")).toBe(true);
+  });
+
+  it("flags dangling data-rd-re references", () => {
+    const html =
+      '<!doctype html><html><body><span data-rd-comment hidden data-rd-id="c1" data-rd-re="h99">orphan</span></body></html>';
+    const result = htmlAdapter.validateReview(html);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === "dangling-reference")).toBe(
+      true,
+    );
+  });
+});
+
+describe("htmlAdapter — extractReviewIndex", () => {
+  it("returns one item per markup element", () => {
+    const index = htmlAdapter.extractReviewIndex(readFixture("with-review.html"));
+    // with-review.html: 1 mark, 1 del, 2 ins, 2 comment spans = 6 elements
+    expect(index.items).toHaveLength(6);
+    expect(index.summary.comments).toBeGreaterThan(0);
+    expect(index.summary.replies).toBe(1);
+    expect(index.summary.suggestions).toBe(3);
+  });
+});
+
+describe("htmlAdapter — appendReply", () => {
+  it("appends a new <span data-rd-comment> to the body", () => {
+    const input = readFixture("with-review.html");
+    const beforeCount = parseHTML(input).document.querySelectorAll(
+      "[data-rd-comment]",
+    ).length;
+    const output = htmlAdapter.appendReply(input, {
+      parentId: "c1",
+      message: "Replying now.",
+      author: "AI",
+      at: "2026-05-28T00:00:00Z",
+      id: "c3",
+    });
+    const outDoc = parseHTML(output).document;
+    expect(outDoc.querySelectorAll("[data-rd-comment]").length).toBe(
+      beforeCount + 1,
+    );
+    const added = outDoc.querySelector('[data-rd-id="c3"]');
+    expect(added?.getAttribute("data-rd-re")).toBe("c1");
+    expect(added?.textContent).toBe("Replying now.");
+  });
+});
+
+describe("htmlAdapter — markResolved", () => {
+  it('sets data-rd-status="resolved" on the target element', () => {
+    const input = readFixture("with-review.html");
+    const output = htmlAdapter.markResolved(input, { targetId: "h1" });
+    const target = parseHTML(output).document.querySelector(
+      '[data-rd-id="h1"]',
+    );
+    expect(target?.getAttribute("data-rd-status")).toBe("resolved");
   });
 });
 
