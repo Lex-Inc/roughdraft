@@ -57,6 +57,9 @@ importers:
       '@joplin/turndown-plugin-gfm':
         specifier: ^1.0.64
         version: 1.0.64
+      '@roughdraft/rfm':
+        specifier: workspace:*
+        version: link:../rfm
       '@tiptap/core':
         specifier: ^3.22.4
         version: 3.22.4(@tiptap/pm@3.22.4)

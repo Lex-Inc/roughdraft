@@ -11,6 +11,9 @@ export default defineConfig(() => {
     resolve: {
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
+        "@roughdraft/rfm": fileURLToPath(
+          new URL("../rfm/src/index.ts", import.meta.url),
+        ),
       },
     },
     build: {

@@ -12,10 +12,9 @@ import {
   createCriticChange,
   createCriticComment,
   criticMarkdownHasReviewRail,
-  criticMarkdownToEditorState,
-  editorStateToCriticMarkdown,
   getCommentDescendantIds,
 } from "./critic-markup";
+import { markdownAdapter } from "./formats";
 import {
   type CriticChangeRailItem,
   DocumentReviewRail,
@@ -640,7 +639,7 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
 
   const parsedContent = useMemo(
     () =>
-      criticMarkdownToEditorState(sourceMarkdown, {
+      markdownAdapter.parse(sourceMarkdown, {
         resolveFileUrl,
         resolveLinkUrl,
       }),
@@ -672,11 +671,11 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
       if (!currentDoc) return;
 
       onMarkdownChange(
-        editorStateToCriticMarkdown(
-          currentDoc,
-          nextComments ?? commentsRef.current,
-          { frontmatter: frontmatterRef.current },
-        ),
+        markdownAdapter.serialize({
+          doc: currentDoc,
+          comments: nextComments ?? commentsRef.current,
+          frontmatter: frontmatterRef.current,
+        }),
       );
     },
     [onMarkdownChange],

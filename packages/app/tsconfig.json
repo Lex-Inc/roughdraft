@@ -5,7 +5,8 @@
     "moduleResolution": "bundler",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@roughdraft/rfm": ["../rfm/src/index.ts"]
     },
     "jsx": "react-jsx",
     "strict": true,
