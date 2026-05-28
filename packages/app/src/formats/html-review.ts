@@ -153,7 +153,8 @@ function reviewItemFromElement(el: AnyElement): RfmReviewItem | null {
 export function extractHtmlReviewIndex(html: string): RfmReviewIndex {
   const { document } = parse(html);
   const items: RfmReviewItem[] = [];
-  const selectors = "mark[data-rd-id], ins[data-rd-id], del[data-rd-id], [data-rd-comment]";
+  const selectors =
+    "mark[data-rd-id], ins[data-rd-id], del[data-rd-id], [data-rd-comment]";
   const elements = document.querySelectorAll(selectors);
   for (const el of Array.from(elements)) {
     const item = reviewItemFromElement(el);
@@ -220,9 +221,7 @@ export function markHtmlResolved(
   options: MarkRoughdraftResolvedOptions,
 ): string {
   const { document } = parse(html);
-  const target = document.querySelector(
-    `[data-rd-id="${options.targetId}"]`,
-  );
+  const target = document.querySelector(`[data-rd-id="${options.targetId}"]`);
   if (target) {
     target.setAttribute("data-rd-status", "resolved");
     if (options.summary) {

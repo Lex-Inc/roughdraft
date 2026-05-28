@@ -85,7 +85,9 @@ describe("htmlAdapter — validateReview", () => {
 
 describe("htmlAdapter — extractReviewIndex", () => {
   it("returns one item per markup element", () => {
-    const index = htmlAdapter.extractReviewIndex(readFixture("with-review.html"));
+    const index = htmlAdapter.extractReviewIndex(
+      readFixture("with-review.html"),
+    );
     // with-review.html: 1 mark, 1 del, 2 ins, 2 comment spans = 6 elements
     expect(index.items).toHaveLength(6);
     expect(index.summary.comments).toBeGreaterThan(0);
@@ -98,7 +100,7 @@ describe("htmlAdapter — appendReply", () => {
   it("appends a new <span data-rd-comment> to the body", () => {
     const input = readFixture("with-review.html");
     const beforeCount = parseHTML(input).document.querySelectorAll(
-      "[data-rd-comment]",
+      "[data-rd-comment]", // selector-check-ignore: review-markup namespace, not a UI test selector
     ).length;
     const output = htmlAdapter.appendReply(input, {
       parentId: "c1",
@@ -108,10 +110,10 @@ describe("htmlAdapter — appendReply", () => {
       id: "c3",
     });
     const outDoc = parseHTML(output).document;
-    expect(outDoc.querySelectorAll("[data-rd-comment]").length).toBe(
-      beforeCount + 1,
-    );
-    const added = outDoc.querySelector('[data-rd-id="c3"]');
+    expect(
+      outDoc.querySelectorAll("[data-rd-comment]").length, // selector-check-ignore
+    ).toBe(beforeCount + 1);
+    const added = outDoc.querySelector('[data-rd-id="c3"]'); // selector-check-ignore
     expect(added?.getAttribute("data-rd-re")).toBe("c1");
     expect(added?.textContent).toBe("Replying now.");
   });
@@ -122,7 +124,7 @@ describe("htmlAdapter — markResolved", () => {
     const input = readFixture("with-review.html");
     const output = htmlAdapter.markResolved(input, { targetId: "h1" });
     const target = parseHTML(output).document.querySelector(
-      '[data-rd-id="h1"]',
+      '[data-rd-id="h1"]', // selector-check-ignore: asserts review-markup attribute, not UI
     );
     expect(target?.getAttribute("data-rd-status")).toBe("resolved");
   });
@@ -143,12 +145,13 @@ describe("htmlAdapter — extractTitle", () => {
 
   it("falls back to first <h1> when <title> is missing", () => {
     const html =
-      '<!doctype html><html><head></head><body><h1>From H1</h1></body></html>';
+      "<!doctype html><html><head></head><body><h1>From H1</h1></body></html>";
     expect(htmlAdapter.extractTitle(html)).toBe("From H1");
   });
 
   it("returns null when neither <title> nor <h1> exists", () => {
-    const html = "<!doctype html><html><head></head><body><p>x</p></body></html>";
+    const html =
+      "<!doctype html><html><head></head><body><p>x</p></body></html>";
     expect(htmlAdapter.extractTitle(html)).toBeNull();
   });
 });

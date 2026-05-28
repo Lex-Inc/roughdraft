@@ -93,7 +93,7 @@ function extractCommentsFromBody(bodyHtml: string): {
       createdAt: at ?? "",
       authorType: by === "AI" ? "ai" : "user",
       authorId: by ?? null,
-      parentCommentId: re && re.startsWith("c") ? re : null,
+      parentCommentId: re?.startsWith("c") ? re : null,
     });
     span.remove();
   }
