@@ -76,7 +76,8 @@
   .tiptap {
     @apply min-h-[120px] text-slate-800 dark:text-slate-200 outline-none;
     --editor-font-size: 16px;
-    font-size: var(--editor-font-size);
+    font-size: var(--user-editor-font-size, var(--editor-font-size));
+    font-family: var(--editor-font-family, var(--font-sans));
     line-height: 1.58;
   }
 
@@ -717,4 +718,141 @@
   --code-block-background: oklch(0.141 0.006 67.1);
   --code-block-border: oklch(1 0 0 / 10%);
   --code-block-foreground: oklch(0.985 0 0);
+}
+
+/* Warm theme: a cream/sepia light palette. */
+.warm {
+  --background: oklch(0.971 0.014 78);
+  --foreground: oklch(0.305 0.024 52);
+  --card: oklch(0.985 0.013 80);
+  --card-foreground: oklch(0.305 0.024 52);
+  --popover: oklch(0.985 0.013 80);
+  --popover-foreground: oklch(0.305 0.024 52);
+  --primary: oklch(0.34 0.026 50);
+  --primary-foreground: oklch(0.98 0.012 82);
+  --secondary: oklch(0.93 0.018 76);
+  --secondary-foreground: oklch(0.34 0.026 50);
+  --muted: oklch(0.93 0.018 76);
+  --muted-foreground: oklch(0.5 0.022 58);
+  --accent: oklch(0.93 0.018 76);
+  --accent-foreground: oklch(0.34 0.026 50);
+  --border: oklch(0.88 0.02 74);
+  --input: oklch(0.88 0.02 74);
+  --ring: oklch(0.7 0.035 66);
+  --sidebar: oklch(0.95 0.016 77);
+  --sidebar-foreground: oklch(0.305 0.024 52);
+  --sidebar-primary: oklch(0.34 0.026 50);
+  --sidebar-primary-foreground: oklch(0.98 0.012 82);
+  --sidebar-accent: oklch(0.93 0.018 76);
+  --sidebar-accent-foreground: oklch(0.34 0.026 50);
+  --sidebar-border: oklch(0.88 0.02 74);
+  --sidebar-ring: oklch(0.7 0.035 66);
+  --code-block-background: oklch(0.945 0.018 77);
+  --code-block-border: oklch(0.88 0.02 74);
+  --code-block-foreground: oklch(0.305 0.024 52);
+}
+
+/* Syntax-highlighting (lowlight / highlight.js) token colors, themed. */
+:root {
+  --hl-comment: oklch(0.55 0.02 60);
+  --hl-keyword: oklch(0.5 0.18 305);
+  --hl-string: oklch(0.5 0.13 150);
+  --hl-number: oklch(0.55 0.15 50);
+  --hl-function: oklch(0.5 0.16 255);
+  --hl-type: oklch(0.5 0.12 200);
+  --hl-meta: oklch(0.55 0.02 60);
+}
+
+.dark {
+  --hl-comment: oklch(0.62 0.02 60);
+  --hl-keyword: oklch(0.74 0.16 310);
+  --hl-string: oklch(0.78 0.14 150);
+  --hl-number: oklch(0.78 0.13 60);
+  --hl-function: oklch(0.74 0.13 250);
+  --hl-type: oklch(0.78 0.1 200);
+  --hl-meta: oklch(0.62 0.02 60);
+}
+
+.warm {
+  --hl-comment: oklch(0.52 0.03 60);
+  --hl-keyword: oklch(0.48 0.15 30);
+  --hl-string: oklch(0.46 0.1 140);
+  --hl-number: oklch(0.5 0.13 45);
+  --hl-function: oklch(0.46 0.12 250);
+  --hl-type: oklch(0.48 0.1 200);
+  --hl-meta: oklch(0.52 0.03 60);
+}
+
+.tiptap pre code .hljs-comment,
+.tiptap pre code .hljs-quote {
+  color: var(--hl-comment);
+  font-style: italic;
+}
+
+.tiptap pre code .hljs-keyword,
+.tiptap pre code .hljs-selector-tag,
+.tiptap pre code .hljs-literal,
+.tiptap pre code .hljs-section,
+.tiptap pre code .hljs-doctag {
+  color: var(--hl-keyword);
+}
+
+.tiptap pre code .hljs-string,
+.tiptap pre code .hljs-attr,
+.tiptap pre code .hljs-attribute,
+.tiptap pre code .hljs-addition,
+.tiptap pre code .hljs-regexp {
+  color: var(--hl-string);
+}
+
+.tiptap pre code .hljs-number,
+.tiptap pre code .hljs-symbol,
+.tiptap pre code .hljs-bullet,
+.tiptap pre code .hljs-variable,
+.tiptap pre code .hljs-template-variable {
+  color: var(--hl-number);
+}
+
+.tiptap pre code .hljs-title,
+.tiptap pre code .hljs-name,
+.tiptap pre code .hljs-built_in,
+.tiptap pre code .hljs-tag {
+  color: var(--hl-function);
+}
+
+.tiptap pre code .hljs-type,
+.tiptap pre code .hljs-class .hljs-title {
+  color: var(--hl-type);
+}
+
+.tiptap pre code .hljs-meta {
+  color: var(--hl-meta);
+}
+
+.tiptap pre code .hljs-emphasis {
+  font-style: italic;
+}
+
+.tiptap pre code .hljs-strong {
+  font-weight: 600;
+}
+
+/* Warm theme: the editor body/headings use hardcoded slate text colors, which
+   don't react to warm (it isn't "dark"); point them at the warm foreground. */
+.warm .tiptap,
+.warm .tiptap h1,
+.warm .tiptap h2,
+.warm .tiptap h3 {
+  color: var(--foreground);
+}
+
+/* Reading-column width, widened by the "wide" preference (.editor-wide). */
+:root {
+  --reading-width: 46.5rem;
+  --reading-shell-width: 1080px;
+}
+
+.editor-wide {
+  --reading-width: 60rem;
+  --reading-shell-width: 1500px;
 }

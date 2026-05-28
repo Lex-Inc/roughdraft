@@ -1,6 +1,6 @@
-import { Extension, Mark, Node, mergeAttributes } from "@tiptap/core";
+import { Extension, Mark, mergeAttributes, Node } from "@tiptap/core";
 import Code from "@tiptap/extension-code";
-import CodeBlock from "@tiptap/extension-code-block";
+import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -17,6 +17,7 @@ import type {
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
+import { common, createLowlight } from "lowlight";
 import { rawMarkdownBlockAttribute } from "./markdown";
 
 declare module "@tiptap/core" {
@@ -713,9 +714,13 @@ const MarkdownCode = Code.extend({
   excludes: "bold italic strike link",
 });
 
-const MarkdownCodeBlock = CodeBlock.extend({
+// lowlight (highlight.js) tokenizes fenced code blocks for syntax highlighting.
+// `common` covers the ~37 most-used languages; token colors are themed in CSS.
+const lowlight = createLowlight(common);
+
+const MarkdownCodeBlock = CodeBlockLowlight.extend({
   marks: "commentRef criticChange",
-});
+}).configure({ lowlight });
 
 const MarkdownImage = Image.extend({
   addAttributes() {

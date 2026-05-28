@@ -4,7 +4,7 @@ import { TextSelection } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-
+import { buildLocationForLinkedMarkdownDocument } from "./app-navigation";
 import { CommentEditorList } from "./CommentEditorList";
 import {
   type CriticChangeAttrs,
@@ -30,7 +30,6 @@ import {
 } from "./editor-extensions";
 import { cn } from "./lib/utils";
 import { MarkdownCodeEditor } from "./MarkdownCodeEditor";
-import { buildLocationForLinkedMarkdownDocument } from "./app-navigation";
 import { toHtml } from "./markdown";
 import type { Page, StorageBackend } from "./storage";
 import { useCommentAnchorLayout } from "./useCommentAnchorLayout";
@@ -1864,20 +1863,20 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
     .map((commentId) => comments.get(commentId))
     .filter((comment): comment is CriticComment => Boolean(comment));
   const contentCardClass =
-    "rounded-[0.75rem] border border-[#E9E9E8] dark:border-slate-700 bg-white dark:bg-card shadow-[0_18px_44px_rgba(57,47,38,0.08)] dark:shadow-[0_18px_44px_rgba(0,0,0,0.35)]";
+    "rounded-[0.75rem] border border-border bg-card shadow-[0_18px_44px_rgba(57,47,38,0.08)] dark:shadow-[0_18px_44px_rgba(0,0,0,0.35)]";
   const documentShellClass = cn(
     "document-page-shell",
     layout === "embedded-demo"
       ? "grid grid-cols-1 gap-3 p-4 min-[900px]:grid-cols-[minmax(0,min(100%,42rem))_minmax(13rem,16rem)] min-[900px]:items-start min-[900px]:justify-start"
-      : "flex flex-col gap-6 min-[1100px]:grid min-[1100px]:grid-cols-[minmax(0,46.5rem)_minmax(24rem,1fr)] min-[1100px]:items-start min-[1100px]:justify-between min-[1100px]:gap-8",
+      : "flex flex-col gap-6 min-[1100px]:grid min-[1100px]:grid-cols-[minmax(0,var(--reading-width))_minmax(24rem,1fr)] min-[1100px]:items-start min-[1100px]:justify-between min-[1100px]:gap-8",
     !hasReviewRail && "document-page-shell-no-comments",
     layout !== "embedded-demo" &&
       !hasReviewRail &&
-      "min-[1100px]:grid-cols-[minmax(0,46.5rem)] min-[1100px]:justify-center",
+      "min-[1100px]:grid-cols-[minmax(0,var(--reading-width))] min-[1100px]:justify-center",
   );
   const documentMainClass = cn(
     "document-page-main w-full min-w-0",
-    layout === "embedded-demo" ? "max-w-none" : "max-w-[46.5rem]",
+    layout === "embedded-demo" ? "max-w-none" : "max-w-[var(--reading-width)]",
   );
   const contentInsetClass = layout === "embedded-demo" ? "pb-0" : "pb-24";
   const fallbackClass = cn(
@@ -2019,15 +2018,15 @@ const CodeEditorSurface = memo(function CodeEditorSurface({
     "document-page-shell",
     layout === "embedded-demo"
       ? "grid grid-cols-1 gap-3 p-4 min-[900px]:grid-cols-[minmax(0,min(100%,42rem))_minmax(13rem,16rem)] min-[900px]:items-start min-[900px]:justify-start"
-      : "flex flex-col gap-6 min-[1100px]:grid min-[1100px]:grid-cols-[minmax(0,46.5rem)_minmax(24rem,1fr)] min-[1100px]:items-start min-[1100px]:justify-between min-[1100px]:gap-8",
+      : "flex flex-col gap-6 min-[1100px]:grid min-[1100px]:grid-cols-[minmax(0,var(--reading-width))_minmax(24rem,1fr)] min-[1100px]:items-start min-[1100px]:justify-between min-[1100px]:gap-8",
     !hasCommentRailSpace && "document-page-shell-no-comments",
     layout !== "embedded-demo" &&
       !hasCommentRailSpace &&
-      "min-[1100px]:grid-cols-[minmax(0,46.5rem)] min-[1100px]:justify-center",
+      "min-[1100px]:grid-cols-[minmax(0,var(--reading-width))] min-[1100px]:justify-center",
   );
   const documentMainClass = cn(
     "document-page-main w-full min-w-0",
-    layout === "embedded-demo" ? "max-w-none" : "max-w-[46.5rem]",
+    layout === "embedded-demo" ? "max-w-none" : "max-w-[var(--reading-width)]",
   );
   const contentInsetClass = layout === "embedded-demo" ? "pb-0" : "pb-24";
   const reviewRailClass = cn(

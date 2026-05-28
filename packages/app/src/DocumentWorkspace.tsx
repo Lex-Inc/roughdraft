@@ -42,6 +42,7 @@ import {
   type DocumentSaveState,
   PageCard,
 } from "./PageCard";
+import { SettingsDialog } from "./SettingsDialog";
 import type { CompleteReviewOptions, Page, StorageBackend } from "./storage";
 
 type DiskChangeState = "clean" | "changed" | "conflict" | "paused";
@@ -443,6 +444,7 @@ export function DocumentWorkspace({
         data-document-status-stack="true"
       >
         <div className="flex max-w-full items-center justify-end gap-1.5">
+          <SettingsDialog />
           {showReviewHandoffButton ? (
             <Popover
               open={reviewHandoffPopoverOpen}
@@ -633,17 +635,17 @@ export function DocumentWorkspace({
           </div>
         </div>
       ) : null}
-      <div className="mx-auto min-h-full max-w-[1080px]">
+      <div className="mx-auto min-h-full max-w-[var(--reading-shell-width)]">
         {documentPage ? (
           <div
             data-testid="document-page-header"
             className={cn(
-              "document-page-shell mb-2 flex flex-col gap-6 text-[0.62rem] font-medium tracking-[0.01em] text-stone-400 min-[1100px]:grid min-[1100px]:grid-cols-[minmax(0,46.5rem)_minmax(24rem,1fr)] min-[1100px]:items-start min-[1100px]:justify-between min-[1100px]:gap-8",
+              "document-page-shell mb-2 flex flex-col gap-6 text-[0.62rem] font-medium tracking-[0.01em] text-stone-400 min-[1100px]:grid min-[1100px]:grid-cols-[minmax(0,var(--reading-width))_minmax(24rem,1fr)] min-[1100px]:items-start min-[1100px]:justify-between min-[1100px]:gap-8",
               !documentHasComments &&
-                "document-page-shell-no-comments min-[1100px]:grid-cols-[minmax(0,46.5rem)] min-[1100px]:justify-center",
+                "document-page-shell-no-comments min-[1100px]:grid-cols-[minmax(0,var(--reading-width))] min-[1100px]:justify-center",
             )}
           >
-            <div className="document-page-main w-full max-w-[46.5rem] min-w-0">
+            <div className="document-page-main w-full max-w-[var(--reading-width)] min-w-0">
               <div className="flex w-full flex-wrap items-center gap-1.5 px-1">
                 <Tooltip>
                   <TooltipTrigger
