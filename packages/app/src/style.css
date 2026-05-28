@@ -718,3 +718,33 @@
   --code-block-border: oklch(1 0 0 / 10%);
   --code-block-foreground: oklch(0.985 0 0);
 }
+
+.mermaid-block {
+  display: flex;
+  justify-content: center;
+  margin: 1rem 0;
+}
+
+.mermaid-block svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-source-fallback,
+.mermaid-error {
+  width: 100%;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--code-block-border);
+  border-radius: 0.5rem;
+  background: var(--code-block-background);
+  color: var(--code-block-foreground);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.85em;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.mermaid-error {
+  border-color: oklch(0.6 0.2 25);
+}

@@ -10,19 +10,20 @@ import {
 import type TurndownService from "turndown";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import {
-  createEditorExtensions,
   type CriticChangeAttrs,
   type CriticChangeKind,
+  createEditorExtensions,
 } from "../editor-extensions";
 import {
-  createMarkedRenderer,
-  createTurndownService,
-  normalizeBlockSpacing,
   appendYamlEndmatter,
+  createMarkedRenderer,
+  createMermaidBlock,
+  createTurndownService,
+  type MarkdownOptions,
+  normalizeBlockSpacing,
   prependYamlFrontmatter,
   protectRichTextRoundTripMarkdown,
   splitYamlDocumentMetadata,
-  type MarkdownOptions,
 } from "../markdown";
 
 export interface CriticComment {
@@ -996,6 +997,11 @@ function renderCriticCodeBlock(
   endmatter?: ParsedEndmatter,
 ) {
   const language = (token.lang || "").match(/\S+/)?.[0];
+
+  if (language === "mermaid") {
+    return createMermaidBlock(token.text);
+  }
+
   const classAttr = language ? ` class="language-${escapeHtml(language)}"` : "";
   const content = token.escaped
     ? token.text

@@ -4,6 +4,7 @@ import TurndownService from "turndown";
 import { parse as parseYaml } from "yaml";
 
 export const rawMarkdownBlockAttribute = "data-markdown-raw-block";
+export const mermaidBlockAttribute = "data-mermaid-source";
 
 export interface MarkdownOptions {
   resolveFileUrl?: (path: string) => string | null;
@@ -53,6 +54,28 @@ function createRawMarkdownBlock(markdown: string): string {
   return `<div ${rawMarkdownBlockAttribute}="${escapeHtml(
     encodeRawMarkdownBlock(markdown),
   )}"></div>\n`;
+}
+
+function encodeMermaidSource(source: string): string {
+  return encodeURIComponent(source);
+}
+
+function decodeMermaidSource(encoded: string): string {
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return encoded;
+  }
+}
+
+export function createMermaidBlock(source: string): string {
+  return `<div ${mermaidBlockAttribute}="${escapeHtml(
+    encodeMermaidSource(source),
+  )}"></div>\n`;
+}
+
+function mermaidFenceFromEncoded(encoded: string): string {
+  return `\n\n\`\`\`mermaid\n${decodeMermaidSource(encoded).trim()}\n\`\`\`\n\n`;
 }
 
 function protectRawHtmlBlocks(markdown: string): string {
@@ -315,6 +338,11 @@ export function createMarkedRenderer(options?: MarkdownOptions) {
 
   renderer.code = ({ text, lang, escaped }) => {
     const language = (lang || "").match(/\S+/)?.[0];
+
+    if (language === "mermaid") {
+      return createMermaidBlock(text);
+    }
+
     const content = escaped ? text : escapeHtml(text);
     const classAttr = language
       ? ` class="language-${escapeHtml(language)}"`
@@ -386,6 +414,15 @@ export function createTurndownService(): TurndownService {
         return `\n\n${decodeRawMarkdownBlock(
           node.getAttribute(rawMarkdownBlockAttribute) ?? "",
         ).trimEnd()}\n\n`;
+      }
+
+      // Empty divs are routed here by Turndown before custom rules, so the
+      // mermaid round-trip must be handled in blankReplacement (the addRule
+      // below only fires for the non-blank case).
+      if (node.hasAttribute(mermaidBlockAttribute)) {
+        return mermaidFenceFromEncoded(
+          node.getAttribute(mermaidBlockAttribute) ?? "",
+        );
       }
 
       return (node as HTMLElement & { isBlock?: boolean }).isBlock
@@ -521,6 +558,17 @@ export function createTurndownService(): TurndownService {
       const encoded =
         (node as HTMLElement).getAttribute(rawMarkdownBlockAttribute) ?? "";
       return `\n\n${decodeRawMarkdownBlock(encoded).trimEnd()}\n\n`;
+    },
+  });
+
+  service.addRule("mermaidBlock", {
+    filter: (node) =>
+      node.nodeType === 1 &&
+      (node as HTMLElement).hasAttribute(mermaidBlockAttribute),
+    replacement(_content, node) {
+      const encoded =
+        (node as HTMLElement).getAttribute(mermaidBlockAttribute) ?? "";
+      return mermaidFenceFromEncoded(encoded);
     },
   });
 

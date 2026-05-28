@@ -1,4 +1,4 @@
-import { Extension, Mark, Node, mergeAttributes } from "@tiptap/core";
+import { Extension, Mark, mergeAttributes, Node } from "@tiptap/core";
 import Code from "@tiptap/extension-code";
 import CodeBlock from "@tiptap/extension-code-block";
 import Image from "@tiptap/extension-image";
@@ -17,7 +17,8 @@ import type {
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
-import { rawMarkdownBlockAttribute } from "./markdown";
+import { mermaidBlockAttribute, rawMarkdownBlockAttribute } from "./markdown";
+import { renderMermaidInto } from "./render-mermaid";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -767,6 +768,67 @@ const RawMarkdownBlock = Node.create({
   },
 });
 
+const MermaidBlock = Node.create({
+  name: "mermaidBlock",
+  group: "block",
+  atom: true,
+  selectable: true,
+
+  addAttributes() {
+    return {
+      source: {
+        default: "",
+        parseHTML: (element) => {
+          const raw = element.getAttribute(mermaidBlockAttribute) ?? "";
+          try {
+            return decodeURIComponent(raw);
+          } catch {
+            return raw;
+          }
+        },
+        renderHTML: (attributes) => ({
+          [mermaidBlockAttribute]: encodeURIComponent(
+            (attributes.source as string) ?? "",
+          ),
+        }),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: `div[${mermaidBlockAttribute}]`, priority: 1000 }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["div", mergeAttributes(HTMLAttributes)];
+  },
+
+  addNodeView() {
+    return ({ node }) => {
+      const dom = document.createElement("div");
+      dom.className = "mermaid-block";
+      dom.contentEditable = "false";
+
+      void renderMermaidInto(dom, (node.attrs.source as string) ?? "");
+
+      return {
+        dom,
+        // The diagram SVG is injected asynchronously; ProseMirror must not
+        // treat those DOM mutations as document edits.
+        ignoreMutation: () => true,
+        update: (updatedNode: ProseMirrorNode) => {
+          if (updatedNode.type.name !== "mermaidBlock") return false;
+          void renderMermaidInto(
+            dom,
+            (updatedNode.attrs.source as string) ?? "",
+          );
+          return true;
+        },
+      };
+    };
+  },
+});
+
 export function createEditorExtensions(placeholder: string) {
   return [
     StarterKit.configure({
@@ -799,6 +861,7 @@ export function createEditorExtensions(placeholder: string) {
     CommentRef,
     CriticChange,
     RawMarkdownBlock,
+    MermaidBlock,
     MarkdownCodeBlock,
     CommentHighlight,
     CriticChangeHighlight,
