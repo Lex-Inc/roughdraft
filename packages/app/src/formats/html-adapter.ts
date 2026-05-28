@@ -1,5 +1,7 @@
 import { generateJSON, type JSONContent } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
+import { parseHTML } from "linkedom";
+import type { CriticComment } from "../critic-markup";
 import type {
   EditorState,
   FormatAdapter,
@@ -63,20 +65,50 @@ function decodePreamble(frontmatter: string | null): HtmlPreambleData | null {
   }
 }
 
+function extractCommentsFromBody(bodyHtml: string): {
+  comments: Map<string, CriticComment>;
+  bodyWithoutComments: string;
+} {
+  const { document } = parseHTML(
+    `<!doctype html><html><body>${bodyHtml}</body></html>`,
+  );
+  const body = document.body;
+  const comments = new Map<string, CriticComment>();
+  const spans = body.querySelectorAll("[data-rd-comment]");
+  for (const span of Array.from(spans)) {
+    const id = span.getAttribute("data-rd-id");
+    if (!id) continue;
+    const by = span.getAttribute("data-rd-by");
+    const at = span.getAttribute("data-rd-at");
+    const re = span.getAttribute("data-rd-re");
+    comments.set(id, {
+      id,
+      content: span.textContent ?? "",
+      createdAt: at ?? "",
+      authorType: by === "AI" ? "ai" : "user",
+      authorId: by ?? null,
+      parentCommentId: re && re.startsWith("c") ? re : null,
+    });
+    span.remove();
+  }
+  return { comments, bodyWithoutComments: body.innerHTML };
+}
+
 export const htmlAdapter: FormatAdapter = {
   extension: ".html",
 
   parse(rawContent: string, _options?: ParseOptions): EditorState {
     const { preamble, body, postamble } = splitHtmlDocument(rawContent);
+    const { comments, bodyWithoutComments } = extractCommentsFromBody(body);
     let doc: JSONContent;
     try {
-      doc = generateJSON(body, extensions);
+      doc = generateJSON(bodyWithoutComments, extensions);
     } catch {
       doc = { type: "doc", content: [] };
     }
     return {
       doc,
-      comments: new Map(),
+      comments,
       frontmatter: encodePreamble({ preamble, postamble, rawBody: body }),
     };
   },
@@ -105,7 +137,12 @@ export const htmlAdapter: FormatAdapter = {
     throw new Error("htmlAdapter.markResolved not implemented");
   },
 
-  extractTitle(_content: string): string | null {
-    throw new Error("htmlAdapter.extractTitle not implemented");
+  extractTitle(content: string): string | null {
+    const { document } = parseHTML(content);
+    const titleText = document.querySelector("title")?.textContent?.trim();
+    if (titleText) return titleText;
+    const h1Text = document.querySelector("h1")?.textContent?.trim();
+    if (h1Text) return h1Text;
+    return null;
   },
 };
