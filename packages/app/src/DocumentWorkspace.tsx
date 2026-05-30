@@ -7,8 +7,11 @@ import {
   Eye,
   Loader2,
   MessageSquarePlus,
+  Palette,
   PencilLine,
   RefreshCcw,
+  StretchHorizontal,
+  Type,
   Upload,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -36,6 +39,21 @@ import {
 import { criticMarkdownHasReviewRail } from "./critic-markup";
 import { cn } from "./lib/utils";
 import { toHtml } from "./markdown";
+import {
+  getStoredRoughdraftEditorWidth,
+  getStoredRoughdraftTextSize,
+  getStoredRoughdraftThemePreference,
+  roughdraftEditorWidthOptions,
+  roughdraftTextSizeOptions,
+  roughdraftThemeOptions,
+  setStoredRoughdraftEditorWidth,
+  setStoredRoughdraftTextSize,
+  setStoredRoughdraftThemePreference,
+  subscribeToRoughdraftAppearance,
+  type RoughdraftEditorWidth,
+  type RoughdraftTextSize,
+  type RoughdraftThemePreference,
+} from "./appearance";
 import {
   type DocumentInteractionMode,
   type DocumentSaveController,
@@ -288,9 +306,27 @@ export function DocumentWorkspace({
   const [fileCopyMenuOpen, setFileCopyMenuOpen] = useState(false);
   const [copiedFileAction, setCopiedFileAction] =
     useState<FileCopyAction | null>(null);
+  const [themePreference, setThemePreference] =
+    useState<RoughdraftThemePreference>(getStoredRoughdraftThemePreference);
+  const [textSize, setTextSize] = useState<RoughdraftTextSize>(
+    getStoredRoughdraftTextSize,
+  );
+  const [editorWidth, setEditorWidth] = useState<RoughdraftEditorWidth>(
+    getStoredRoughdraftEditorWidth,
+  );
   const [overallComment, setOverallComment] = useState("");
   const sawNoWatcherAfterNotifiedRef = useRef(false);
   const saveControllerRef = useRef<DocumentSaveController | null>(null);
+
+  useEffect(
+    () =>
+      subscribeToRoughdraftAppearance(() => {
+        setThemePreference(getStoredRoughdraftThemePreference());
+        setTextSize(getStoredRoughdraftTextSize());
+        setEditorWidth(getStoredRoughdraftEditorWidth());
+      }),
+    [],
+  );
 
   const handleSaveStateChange = useCallback(
     (state: DocumentSaveState) => {
@@ -466,6 +502,16 @@ export function DocumentWorkspace({
   );
   const ActiveDocumentInteractionModeIcon =
     activeDocumentInteractionMode?.Icon ?? PencilLine;
+  const activeThemeOption =
+    roughdraftThemeOptions.find((option) => option.value === themePreference) ??
+    roughdraftThemeOptions[0];
+  const activeTextSizeOption =
+    roughdraftTextSizeOptions.find((option) => option.value === textSize) ??
+    roughdraftTextSizeOptions[1];
+  const activeEditorWidthOption =
+    roughdraftEditorWidthOptions.find(
+      (option) => option.value === editorWidth,
+    ) ?? roughdraftEditorWidthOptions[1];
   const conflictNotice =
     documentDiskChangeState === "clean"
       ? null
@@ -528,12 +574,12 @@ export function DocumentWorkspace({
               open={reviewHandoffPopoverOpen}
               onOpenChange={setReviewHandoffPopoverOpen}
             >
-              <div className="relative flex items-center overflow-hidden rounded-[7px] shadow-[0_10px_28px_rgba(0,0,0,0.18)] after:pointer-events-none after:absolute after:top-px after:right-8 after:bottom-px after:z-10 after:w-px after:bg-[#444] after:content-[''] dark:after:bg-[#444]">
+              <div className="relative flex items-center overflow-hidden rounded-[7px] shadow-[var(--rd-shadow-raised)] after:pointer-events-none after:absolute after:top-px after:right-8 after:bottom-px after:z-10 after:w-px after:bg-[var(--rd-primary-separator)] after:content-['']">
                 <Button
                   type="button"
                   data-testid="review-handoff-button"
                   size="lg"
-                  className="h-9 rounded-r-none rounded-l-[7px] border-0 bg-black px-3 text-sm font-bold text-white hover:bg-black/85 focus-visible:ring-black/25 dark:bg-black dark:text-white dark:hover:bg-black/85 dark:focus-visible:ring-white/30"
+                  className="h-9 rounded-r-none rounded-l-[7px] border-0 bg-[var(--rd-primary)] px-3 text-sm font-bold text-[var(--rd-primary-foreground)] hover:bg-[var(--rd-primary-hover)] focus-visible:ring-[var(--rd-ring)]"
                   disabled={reviewHandoffDisabled}
                   onClick={() =>
                     void handleCompleteReview(
@@ -559,7 +605,7 @@ export function DocumentWorkspace({
                       type="button"
                       data-testid="review-handoff-comment-trigger"
                       size="icon-lg"
-                      className="h-9 w-8 rounded-l-none rounded-r-[7px] border-0 bg-black text-white hover:bg-black/85 focus-visible:ring-black/25 dark:bg-black dark:text-white dark:hover:bg-black/85 dark:focus-visible:ring-white/30"
+                      className="h-9 w-8 rounded-l-none rounded-r-[7px] border-0 bg-[var(--rd-primary)] text-[var(--rd-primary-foreground)] hover:bg-[var(--rd-primary-hover)] focus-visible:ring-[var(--rd-ring)]"
                       disabled={reviewHandoffDisabled}
                       aria-label="Add overall handoff comment"
                     >
@@ -609,7 +655,7 @@ export function DocumentWorkspace({
                       type="submit"
                       data-testid="review-handoff-submit-comment"
                       size="lg"
-                      className="w-full rounded-[7px] bg-black text-sm font-bold text-white hover:bg-black/85 focus-visible:ring-black/25 dark:bg-white dark:text-black dark:hover:bg-white/90"
+                      className="w-full rounded-[7px] bg-[var(--rd-primary)] text-sm font-bold text-[var(--rd-primary-foreground)] hover:bg-[var(--rd-primary-hover)] focus-visible:ring-[var(--rd-ring)]"
                       disabled={!trimmedOverallComment}
                     >
                       <CheckCheck className="size-4" />
@@ -618,7 +664,7 @@ export function DocumentWorkspace({
                   </form>
                 ) : (
                   <div className="flex items-start gap-3">
-                    <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-black text-white dark:bg-white dark:text-black">
+                    <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--rd-primary)] text-[var(--rd-primary-foreground)]">
                       {reviewHandoffState === "notifying" ? (
                         <Loader2 className="size-4 animate-spin" />
                       ) : reviewHandoffState === "error" ||
@@ -703,17 +749,17 @@ export function DocumentWorkspace({
           </div>
         </div>
       ) : null}
-      <div className="mx-auto min-h-full max-w-[1080px]">
+      <div className="document-workspace-inner mx-auto min-h-full w-full">
         {documentPage ? (
           <div
             data-testid="document-page-header"
             className={cn(
-              "document-page-shell mb-2 flex flex-col gap-6 text-[0.62rem] font-medium tracking-[0.01em] text-stone-400 min-[1100px]:grid min-[1100px]:grid-cols-[minmax(0,46.5rem)_minmax(24rem,1fr)] min-[1100px]:items-start min-[1100px]:justify-between min-[1100px]:gap-8",
+              "document-page-shell mb-2 flex flex-col gap-6 text-[0.62rem] font-medium tracking-[0.01em] text-stone-400 min-[1100px]:grid min-[1100px]:items-start min-[1100px]:justify-between min-[1100px]:gap-8",
               !documentHasComments &&
-                "document-page-shell-no-comments min-[1100px]:grid-cols-[minmax(0,46.5rem)] min-[1100px]:justify-center",
+                "document-page-shell-no-comments min-[1100px]:justify-center",
             )}
           >
-            <div className="document-page-main w-full max-w-[46.5rem] min-w-0">
+            <div className="document-page-main w-full min-w-0">
               <div className="flex w-full flex-wrap items-center gap-1.5 px-1">
                 <Tooltip>
                   <TooltipTrigger
@@ -721,13 +767,13 @@ export function DocumentWorkspace({
                       <button
                         type="button"
                         data-testid="document-editor-view-toggle"
-                        className="grid shrink-0 grid-cols-2 rounded-[999px] bg-[#E8E3DB] dark:bg-slate-700 px-[2px] pt-[3px] pb-[2px] shadow-[inset_0_1px_0_rgba(255,251,245,0.72)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                        className="grid shrink-0 grid-cols-2 rounded-[999px] bg-[var(--rd-control)] px-[2px] pt-[3px] pb-[2px] shadow-[inset_0_1px_0_rgba(255,255,255,0.42)]"
                       >
                         <span
                           className={`flex w-[1.375rem] items-center justify-center rounded-full py-[2px] transition ${
                             documentEditorViewMode === "rich-text"
-                              ? "bg-[#FFFDFC] dark:bg-slate-500 text-stone-700 dark:text-white shadow-[0_1px_2px_rgba(41,37,36,0.12)]"
-                              : "text-stone-500 dark:text-slate-400"
+                              ? "bg-[var(--rd-control-active)] text-[var(--rd-app-foreground)] shadow-[0_1px_2px_rgba(41,52,38,0.16)]"
+                              : "text-[var(--rd-muted-foreground)]"
                           }`}
                         >
                           <Eye className="size-[0.75rem]" />
@@ -735,8 +781,8 @@ export function DocumentWorkspace({
                         <span
                           className={`flex w-[1.375rem] items-center justify-center rounded-full py-[2px] transition ${
                             documentEditorViewMode === "code"
-                              ? "bg-[#FFFDFC] dark:bg-slate-500 text-stone-700 dark:text-white shadow-[0_1px_2px_rgba(41,37,36,0.12)]"
-                              : "text-stone-500 dark:text-slate-400"
+                              ? "bg-[var(--rd-control-active)] text-[var(--rd-app-foreground)] shadow-[0_1px_2px_rgba(41,52,38,0.16)]"
+                              : "text-[var(--rd-muted-foreground)]"
                           }`}
                         >
                           <CodeXml className="size-[0.75rem]" />
@@ -763,7 +809,7 @@ export function DocumentWorkspace({
                       <button
                         type="button"
                         data-testid="document-file-menu-trigger"
-                        className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-1 py-0.5 font-mono text-[0.7rem] tracking-[0.01em] text-stone-400 outline-none transition hover:bg-[#EEE9E1] hover:text-stone-600 focus-visible:ring-2 focus-visible:ring-stone-300/70 dark:text-stone-500 dark:hover:bg-slate-800 dark:hover:text-stone-300 dark:focus-visible:ring-slate-600/70"
+                        className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-1 py-0.5 font-mono text-[0.7rem] tracking-[0.01em] text-[var(--rd-muted-foreground)] outline-none transition hover:bg-[var(--rd-hover)] hover:text-[var(--rd-app-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--rd-ring)]"
                         title={documentFilenameLabel}
                         aria-label="Document file actions"
                       >
@@ -789,12 +835,12 @@ export function DocumentWorkspace({
                           key={action}
                           type="button"
                           data-testid={`document-file-menu-${action}`}
-                          className="flex h-8 items-center justify-between rounded-md px-2 text-left text-[0.72rem] leading-none text-stone-700 outline-none transition hover:bg-[#EEE9E1] focus-visible:bg-[#EEE9E1] dark:text-stone-300 dark:hover:bg-slate-700 dark:focus-visible:bg-slate-700"
+                          className="flex h-8 items-center justify-between rounded-md px-2 text-left text-[0.72rem] leading-none text-[var(--rd-menu-foreground)] outline-none transition hover:bg-[var(--rd-menu-hover)] focus-visible:bg-[var(--rd-menu-hover)]"
                           onClick={() => void handleCopyFileMenuAction(action)}
                         >
                           <span>{label}</span>
                           {copiedFileAction === action ? (
-                            <Check className="size-3 text-stone-500 dark:text-stone-400" />
+                            <Check className="size-3 text-[var(--rd-muted-foreground)]" />
                           ) : null}
                         </button>
                       ))}
@@ -805,7 +851,95 @@ export function DocumentWorkspace({
                   saveState={saveState}
                   diskChangeState={documentDiskChangeState}
                 />
-                <div className="ml-auto inline-flex h-[1.25rem] shrink-0 items-center">
+                <div className="ml-auto flex min-w-0 shrink-0 items-center gap-1">
+                  <Select<RoughdraftThemePreference>
+                    value={themePreference}
+                    onValueChange={(value) => {
+                      if (value) {
+                        setThemePreference(value);
+                        setStoredRoughdraftThemePreference(value);
+                      }
+                    }}
+                  >
+                    <SelectTrigger
+                      data-testid="document-theme-trigger"
+                      aria-label="Theme"
+                      className="h-[1.5rem] max-w-[8.5rem] px-1 font-mono text-[0.7rem] leading-[1.25rem] font-normal tracking-[0.01em] text-[var(--rd-muted-foreground)] hover:text-[var(--rd-app-foreground)]"
+                    >
+                      <Palette className="size-[0.68rem]" />
+                      <span className="truncate">
+                        {activeThemeOption.label}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent className="w-40">
+                      {roughdraftThemeOptions.map(
+                        ({ value, label, swatch }) => (
+                          <SelectItem key={value} value={value} label={label}>
+                            <span
+                              className="size-2.5 shrink-0 rounded-full border border-[var(--rd-menu-border)]"
+                              style={{ background: swatch }}
+                              aria-hidden="true"
+                            />
+                            <SelectItemText>{label}</SelectItemText>
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <Select<RoughdraftTextSize>
+                    value={textSize}
+                    onValueChange={(value) => {
+                      if (value) {
+                        setTextSize(value);
+                        setStoredRoughdraftTextSize(value);
+                      }
+                    }}
+                  >
+                    <SelectTrigger
+                      data-testid="document-text-size-trigger"
+                      aria-label="Editor text size"
+                      className="h-[1.5rem] max-w-[5.75rem] px-1 font-mono text-[0.7rem] leading-[1.25rem] font-normal tracking-[0.01em] text-[var(--rd-muted-foreground)] hover:text-[var(--rd-app-foreground)]"
+                    >
+                      <Type className="size-[0.68rem]" />
+                      <span className="truncate">
+                        {activeTextSizeOption.label}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent className="w-28">
+                      {roughdraftTextSizeOptions.map(({ value, label }) => (
+                        <SelectItem key={value} value={value} label={label}>
+                          <SelectItemText>{label}</SelectItemText>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select<RoughdraftEditorWidth>
+                    value={editorWidth}
+                    onValueChange={(value) => {
+                      if (value) {
+                        setEditorWidth(value);
+                        setStoredRoughdraftEditorWidth(value);
+                      }
+                    }}
+                  >
+                    <SelectTrigger
+                      data-testid="document-width-trigger"
+                      aria-label="Editor width"
+                      className="h-[1.5rem] max-w-[6.5rem] px-1 font-mono text-[0.7rem] leading-[1.25rem] font-normal tracking-[0.01em] text-[var(--rd-muted-foreground)] hover:text-[var(--rd-app-foreground)]"
+                    >
+                      <StretchHorizontal className="size-[0.68rem]" />
+                      <span className="truncate">
+                        {activeEditorWidthOption.label}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent className="w-32">
+                      {roughdraftEditorWidthOptions.map(({ value, label }) => (
+                        <SelectItem key={value} value={value} label={label}>
+                          <SelectItemText>{label}</SelectItemText>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Select<DocumentInteractionMode>
                     value={documentInteractionMode}
                     onValueChange={(value) => {
@@ -815,7 +949,7 @@ export function DocumentWorkspace({
                     <SelectTrigger
                       data-testid="document-mode-trigger"
                       aria-label="Document mode"
-                      className="h-[1.5rem] px-1 font-mono text-[0.7rem] leading-[1.25rem] font-normal tracking-[0.01em] text-stone-400 dark:text-stone-500 hover:text-stone-500 dark:hover:text-stone-400"
+                      className="h-[1.5rem] px-1 font-mono text-[0.7rem] leading-[1.25rem] font-normal tracking-[0.01em] text-[var(--rd-muted-foreground)] hover:text-[var(--rd-app-foreground)]"
                     >
                       <ActiveDocumentInteractionModeIcon className="size-[0.68rem]" />
                       <span className="truncate">
@@ -826,7 +960,7 @@ export function DocumentWorkspace({
                       {documentInteractionModeOptions.map(
                         ({ value, label, Icon }) => (
                           <SelectItem key={value} value={value} label={label}>
-                            <Icon className="size-3 text-stone-500 dark:text-stone-400" />
+                            <Icon className="size-3 text-[var(--rd-muted-foreground)]" />
                             <SelectItemText>{label}</SelectItemText>
                           </SelectItem>
                         ),

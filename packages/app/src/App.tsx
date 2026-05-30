@@ -1447,7 +1447,7 @@ export function PreviewPage() {
   );
 
   return (
-    <main className="relative flex h-screen min-w-0 flex-col overflow-hidden bg-[#FCFCFC] dark:bg-background text-slate-950 dark:text-slate-50">
+    <main className="relative flex h-screen min-w-0 flex-col overflow-hidden bg-background text-foreground">
       <DocumentWorkspace
         documentPage={previewPage}
         activeDocumentPath={PREVIEW_DOCUMENT_PATH}
@@ -1895,12 +1895,7 @@ export function App() {
   );
 
   if (loading) {
-    return (
-      <div
-        className="h-screen bg-[#FCFCFC] dark:bg-background"
-        aria-hidden="true"
-      />
-    );
+    return <div className="h-screen bg-background" aria-hidden="true" />;
   }
 
   if (isRoughdraftFlavoredMarkdownRoute) {
@@ -1928,7 +1923,7 @@ export function App() {
     getPathLeaf(documentAbsolutePath ?? activeDocumentPath) ?? "Untitled.md";
 
   return (
-    <main className="relative flex h-screen min-w-0 flex-col overflow-hidden bg-[#FCFCFC] dark:bg-background text-slate-950 dark:text-slate-50">
+    <main className="relative flex h-screen min-w-0 flex-col overflow-hidden bg-background text-foreground">
       {updateStatus ? (
         <div className="pointer-events-none absolute top-4 right-4 z-40 max-w-sm">
           <div className="pointer-events-auto">

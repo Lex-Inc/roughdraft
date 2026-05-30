@@ -187,7 +187,7 @@ export function DocumentCommentRail({
               className={cn(
                 "absolute left-0 right-0 rounded-xl border border-transparent bg-transparent shadow-none transition-all duration-200 ease-out will-change-transform",
                 isSelected
-                  ? "border-[#DFDFDC] dark:border-slate-600 bg-white dark:bg-slate-800 shadow-[0_20px_48px_rgba(57,47,38,0.14)] dark:shadow-[0_20px_48px_rgba(0,0,0,0.4)]"
+                  ? "border-[var(--rd-comment-border)] bg-[var(--rd-surface-elevated)] shadow-[var(--rd-shadow-raised)]"
                   : "",
                 isSelected && "-translate-x-2",
                 isExpanded ? "cursor-default" : "cursor-pointer",

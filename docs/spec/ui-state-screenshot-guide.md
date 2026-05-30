@@ -113,6 +113,9 @@ suggestions:
 | Preview | Rich text default | `/preview?editor=rich-text` | `page-card-rich-text`, `rich-text-editor` | Uses in-memory preview backend and includes a sample anchored comment. |
 | Preview | Code editor default | `/preview?editor=code` | `page-card-code`, `markdown-code-editor` | Capture line wrapping, code editor chrome, and rail behavior. |
 | Document | Rich/code toggle | Use `document-editor-view-toggle` | `document-editor-view-toggle` | URL changes to `?editor=code` or `?editor=rich-text`. |
+| Document | Theme menu | Open theme menu and choose each theme option | `document-theme-trigger` | Capture System, Quiet Light, Light+, Quiet Dark, and Dark+ when theme work changes palette tokens. |
+| Document | Text size menu | Open text-size menu and choose each size option | `document-text-size-trigger` | Capture at least 16 px and 20 px in rich-text and code modes when typography or density changes. |
+| Document | Width menu | Open width menu and choose each width option | `document-width-trigger` | Capture at least Comfort and Full in rich-text and code modes when line length or document shell layout changes. |
 | Document | Editing mode | Open mode menu and choose Editing | `document-mode-trigger` | Normal edit behavior. |
 | Document | Suggesting mode | Open mode menu and choose Suggesting | `document-mode-trigger` | Selection actions should create suggestions instead of direct edits. |
 | Document | Viewing mode | Open mode menu and choose Viewing | `document-mode-trigger` | Editing controls should look non-editable. |

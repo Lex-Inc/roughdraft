@@ -2,18 +2,10 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { App } from "./App";
+import { installRoughdraftAppearanceSync } from "./appearance";
 import "./style.css";
 
-const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
-
-function applyColorScheme(dark: boolean) {
-  document.documentElement.classList.toggle("dark", dark);
-}
-
-applyColorScheme(darkQuery.matches);
-darkQuery.addEventListener("change", (event) => {
-  applyColorScheme(event.matches);
-});
+installRoughdraftAppearanceSync();
 
 const rootElement = document.getElementById("root");
 

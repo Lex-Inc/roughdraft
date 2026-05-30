@@ -262,7 +262,7 @@ export function CommentEditorList({
           ? cn(
               "space-y-2 rounded-xl border border-transparent bg-transparent p-3 shadow-none transition-[background-color,border-color,box-shadow] duration-200 ease-out",
               hasActiveSelection
-                ? "border-[#DFDFDC] dark:border-slate-600 bg-white dark:bg-card shadow-[0_20px_48px_rgba(57,47,38,0.14)] dark:shadow-[0_20px_48px_rgba(0,0,0,0.4)]"
+                ? "border-[var(--rd-comment-border)] bg-[var(--rd-surface-elevated)] shadow-[var(--rd-shadow-raised)]"
                 : "",
             )
           : "space-y-1.5 px-4 py-3",
@@ -373,7 +373,7 @@ function CommentActionButton({
           : "h-7 rounded-full border border-transparent px-2.5 text-[11px] font-medium tracking-[0.08em] uppercase transition-colors duration-150",
         tone === "danger"
           ? "text-stone-400 hover:bg-rose-100 hover:text-rose-700 dark:text-stone-500 dark:hover:bg-rose-900/40 dark:hover:text-rose-400"
-          : "text-stone-400 hover:bg-[#DED8CE]/45 hover:text-stone-600 dark:text-stone-500 dark:hover:bg-slate-700 dark:hover:text-stone-300",
+          : "text-[var(--rd-muted-foreground)] hover:bg-[var(--rd-hover)] hover:text-[var(--rd-app-foreground)]",
         className,
       )}
       onPointerDown={(event) => event.stopPropagation()}
@@ -440,20 +440,20 @@ function CommentThreadNode({
       ? "border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-700 dark:bg-sky-900 dark:text-sky-400"
       : "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-700 dark:bg-sky-900 dark:text-sky-400"
     : variant === "banner"
-      ? "border-[#D2C7B8] bg-[#DED8CE] text-stone-700 dark:border-slate-600 dark:bg-slate-700 dark:text-stone-300"
-      : "border-[#D2C7B8] bg-[#DED8CE] text-stone-700 dark:border-slate-600 dark:bg-slate-700 dark:text-stone-300";
+      ? "border-[var(--rd-comment-avatar-border)] bg-[var(--rd-comment-avatar)] text-[var(--rd-comment-avatar-foreground)]"
+      : "border-[var(--rd-comment-avatar-border)] bg-[var(--rd-comment-avatar)] text-[var(--rd-comment-avatar-foreground)]";
   const bodyTone =
     variant === "banner"
       ? isSelected
-        ? "bg-white"
+        ? "bg-[var(--rd-surface-elevated)]"
         : isHovered
-          ? "bg-white"
+          ? "bg-[var(--rd-surface-elevated)]"
           : "bg-transparent"
       : "bg-transparent";
   const treeLineTone =
     variant === "banner"
-      ? "bg-[#DED8CE]/90 dark:bg-slate-600/90"
-      : "bg-[#DED8CE]/85 dark:bg-slate-600/85";
+      ? "bg-[var(--rd-comment-line)]"
+      : "bg-[var(--rd-comment-line)]";
   const defaultContent =
     comment.content.trim().length > 0 ? comment.content : "Empty comment";
   const renderedContent =
@@ -543,9 +543,7 @@ function CommentThreadNode({
         "relative transition-all duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300 dark:focus-visible:ring-slate-600",
         variant === "rail" &&
           isRootThread &&
-          (index > 0
-            ? "border-t border-slate-200/80 dark:border-slate-700/80 pt-3"
-            : "pt-0"),
+          (index > 0 ? "border-t border-[var(--rd-border)] pt-3" : "pt-0"),
       )}
       onClick={() => {
         if (!interactive) return;
@@ -622,7 +620,7 @@ function CommentThreadNode({
                 tone="danger"
                 icon={<Trash2 className="size-3.5" />}
                 compact
-                className="absolute top-0 right-0 z-20 bg-white/80 dark:bg-slate-800/80"
+                className="absolute top-0 right-0 z-20 bg-[var(--rd-surface-elevated)]"
                 onClick={(event) => {
                   event.stopPropagation();
                   onDeleteComment(comment.id);
@@ -662,15 +660,15 @@ function CommentThreadNode({
                 bodyTone,
               )}
             >
-              <div className="truncate text-[13px] font-semibold text-slate-900 dark:text-slate-100">
+              <div className="truncate text-[13px] font-semibold text-[var(--rd-heading-foreground)]">
                 {authorLabel}
               </div>
               <div
                 className={cn(
                   "mt-1 text-sm leading-6 whitespace-pre-wrap",
                   variant === "banner"
-                    ? "text-slate-800 dark:text-slate-200"
-                    : "text-slate-700 dark:text-slate-300",
+                    ? "text-[var(--rd-editor-foreground)]"
+                    : "text-[var(--rd-menu-foreground)]",
                 )}
               >
                 {isEditing ? null : renderedContent}
@@ -693,8 +691,8 @@ function CommentThreadNode({
                   className={cn(
                     "mt-1 min-h-12 px-3 py-2 text-sm leading-6 md:text-sm md:leading-6",
                     variant === "banner"
-                      ? "border-amber-200 dark:border-amber-700 bg-white/90 dark:bg-slate-800/90 text-slate-800 dark:text-slate-200"
-                      : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 shadow-none",
+                      ? "border-amber-300 bg-[var(--rd-surface-elevated)] text-[var(--rd-editor-foreground)]"
+                      : "border-[var(--rd-border)] bg-[var(--rd-surface-elevated)] text-[var(--rd-menu-foreground)] shadow-none",
                   )}
                   onPointerDown={(event) => {
                     event.stopPropagation();

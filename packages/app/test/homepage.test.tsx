@@ -271,7 +271,9 @@ describe("Homepage", () => {
       container,
       "rfm-result-editor",
     ).querySelector('[data-testid="document-content-card"]');
-    expect(resultDocumentCard?.className).toContain("bg-white");
+    expect(resultDocumentCard?.className).toContain(
+      "bg-[var(--rd-editor-background)]",
+    );
     expect(resultDocumentCard?.className).toContain("shadow-");
     expect(queryByTestId(container, "rfm-token")).toBeNull();
     expect(

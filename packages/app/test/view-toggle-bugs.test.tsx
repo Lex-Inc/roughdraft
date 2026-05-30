@@ -11,6 +11,11 @@ import {
   DocumentWorkspace,
   isReviewHandoffDisabled,
 } from "../src/DocumentWorkspace";
+import {
+  ROUGHDRAFT_EDITOR_WIDTH_STORAGE_KEY,
+  ROUGHDRAFT_TEXT_SIZE_STORAGE_KEY,
+  ROUGHDRAFT_THEME_STORAGE_KEY,
+} from "../src/appearance";
 import type { DocumentSaveState } from "../src/PageCard";
 import type {
   CompleteReviewOptions,
@@ -69,6 +74,25 @@ function createPage(content = "Hello world"): Page {
 }
 
 function setupDomMocks() {
+  const localStorageStore = new Map<string, string>();
+  const localStorageMock = {
+    clear: vi.fn(() => localStorageStore.clear()),
+    getItem: vi.fn((key: string) => localStorageStore.get(key) ?? null),
+    removeItem: vi.fn((key: string) => localStorageStore.delete(key)),
+    setItem: vi.fn((key: string, value: string) => {
+      localStorageStore.set(key, value);
+    }),
+  };
+
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: localStorageMock,
+  });
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: localStorageMock,
+  });
+
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
     x: 0,
     y: 0,
@@ -262,6 +286,7 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
       root.unmount();
     });
     container.remove();
+    localStorage.clear();
     Reflect.deleteProperty(globalThis, "ClipboardItem");
     vi.restoreAllMocks();
   });
@@ -328,6 +353,24 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
     await click(getByTestId(container, "document-file-menu-trigger"));
     return getByTestId(document.body, "document-file-menu");
   }
+
+  it("shows persisted appearance controls in the toolbar", async () => {
+    localStorage.setItem(ROUGHDRAFT_THEME_STORAGE_KEY, "dark-plus");
+    localStorage.setItem(ROUGHDRAFT_TEXT_SIZE_STORAGE_KEY, "large");
+    localStorage.setItem(ROUGHDRAFT_EDITOR_WIDTH_STORAGE_KEY, "wide");
+
+    await renderWorkspace();
+
+    expect(
+      getByTestId(container, "document-theme-trigger").textContent,
+    ).toContain("Dark+");
+    expect(
+      getByTestId(container, "document-text-size-trigger").textContent,
+    ).toContain("18 px");
+    expect(
+      getByTestId(container, "document-width-trigger").textContent,
+    ).toContain("Wide");
+  });
 
   it.each([
     ["saved", "Saved", "document-save-status-saved"],

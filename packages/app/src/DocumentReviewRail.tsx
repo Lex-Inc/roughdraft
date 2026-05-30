@@ -125,7 +125,7 @@ function renderQuotedSuggestionText(text: string, fallback: string) {
       : fallback);
 
   return (
-    <span className="italic text-slate-600 dark:text-slate-400">
+    <span className="italic text-[var(--rd-muted-foreground)]">
       "{displayText}"
     </span>
   );
@@ -142,7 +142,7 @@ function SuggestionCommentContent({
   if (suggestion.kind === "addition") {
     return (
       <>
-        <span className="font-semibold text-slate-800 dark:text-slate-200">
+        <span className="font-semibold text-[var(--rd-editor-foreground)]">
           Insert:
         </span>{" "}
         {renderQuotedSuggestionText(newText, "Inserted text")}
@@ -153,7 +153,7 @@ function SuggestionCommentContent({
   if (suggestion.kind === "deletion") {
     return (
       <>
-        <span className="font-semibold text-slate-800 dark:text-slate-200">
+        <span className="font-semibold text-[var(--rd-editor-foreground)]">
           Delete:
         </span>{" "}
         {renderQuotedSuggestionText(oldText, "Deleted text")}
@@ -163,11 +163,11 @@ function SuggestionCommentContent({
 
   return (
     <>
-      <span className="font-semibold text-slate-800 dark:text-slate-200">
+      <span className="font-semibold text-[var(--rd-editor-foreground)]">
         Replace:
       </span>{" "}
       {renderQuotedSuggestionText(oldText, "Original text")}{" "}
-      <span className="text-slate-500 dark:text-slate-400">with</span>{" "}
+      <span className="text-[var(--rd-muted-foreground)]">with</span>{" "}
       {renderQuotedSuggestionText(newText, "Changed text")}
     </>
   );
@@ -441,7 +441,7 @@ export function DocumentReviewRail({
                 className={cn(
                   railLayoutItemClass(railLayout),
                   isSelected
-                    ? "border-[#DFDFDC] dark:border-slate-600 bg-white dark:bg-card shadow-[0_20px_48px_rgba(57,47,38,0.14)] dark:shadow-[0_20px_48px_rgba(0,0,0,0.4)]"
+                    ? "border-[var(--rd-comment-border)] bg-[var(--rd-surface-elevated)] shadow-[var(--rd-shadow-raised)]"
                     : "",
                   isSelected && "-translate-x-2",
                   isExpanded ? "cursor-default" : "cursor-pointer",
@@ -487,25 +487,25 @@ export function DocumentReviewRail({
                 data-suggestion-thread-container="true"
                 className={cn(
                   railLayoutItemClass(railLayout),
-                  "-translate-x-2 border-[#DFDFDC] dark:border-slate-600 bg-white dark:bg-card px-4 py-3 shadow-[0_20px_48px_rgba(57,47,38,0.14)] dark:shadow-[0_20px_48px_rgba(0,0,0,0.4)]",
+                  "-translate-x-2 border-[var(--rd-comment-border)] bg-[var(--rd-surface-elevated)] px-4 py-3 shadow-[var(--rd-shadow-raised)]",
                 )}
                 style={railLayoutItemStyle(railLayout, layout.railTop)}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-[11px] font-semibold tracking-[0.08em] text-stone-500 dark:text-stone-400 uppercase">
+                    <div className="text-[11px] font-semibold tracking-[0.08em] text-[var(--rd-muted-foreground)] uppercase">
                       {draftSuggestion?.type === "replacement"
                         ? "Replacement"
                         : "Insertion"}
                     </div>
-                    <div className="mt-1 text-sm leading-5 text-slate-700 dark:text-slate-300">
+                    <div className="mt-1 text-sm leading-5 text-[var(--rd-menu-foreground)]">
                       {draftSuggestion?.sourceText || "Current cursor position"}
                     </div>
                   </div>
                   <button
                     type="button"
                     data-testid="draft-suggestion-action-dismiss"
-                    className="flex size-7 shrink-0 items-center justify-center rounded-full text-stone-500 dark:text-stone-400 transition hover:bg-stone-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300 dark:focus-visible:ring-slate-600"
+                    className="flex size-7 shrink-0 items-center justify-center rounded-full text-[var(--rd-muted-foreground)] transition hover:bg-[var(--rd-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--rd-ring)]"
                     aria-label="Cancel suggestion"
                     onClick={() => onCancelDraftSuggestion?.()}
                   >
@@ -517,7 +517,7 @@ export function DocumentReviewRail({
                   data-testid="draft-suggestion-editor"
                   value={draftSuggestion?.text ?? ""}
                   rows={2}
-                  className="mt-3 min-h-16 w-full resize-y rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm leading-6 text-slate-800 dark:text-slate-200 outline-none transition focus:border-emerald-300 dark:focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-900"
+                  className="mt-3 min-h-16 w-full resize-y rounded-lg border border-[var(--rd-border)] bg-[var(--rd-editor-background)] px-3 py-2 text-sm leading-6 text-[var(--rd-editor-foreground)] outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200 dark:focus:ring-emerald-900"
                   placeholder={
                     draftSuggestion?.type === "replacement"
                       ? "Replacement text"
@@ -540,7 +540,7 @@ export function DocumentReviewRail({
                   <button
                     type="button"
                     data-testid="draft-suggestion-action-cancel"
-                    className="inline-flex h-8 items-center gap-1 rounded-lg px-3 text-sm font-medium text-stone-600 dark:text-stone-400 transition hover:bg-stone-100 dark:hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300 dark:focus-visible:ring-slate-600"
+                    className="inline-flex h-8 items-center gap-1 rounded-lg px-3 text-sm font-medium text-[var(--rd-muted-foreground)] transition hover:bg-[var(--rd-hover)] hover:text-[var(--rd-app-foreground)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--rd-ring)]"
                     onClick={() => onCancelDraftSuggestion?.()}
                   >
                     Cancel
@@ -643,7 +643,7 @@ export function DocumentReviewRail({
               className={cn(
                 railLayoutItemClass(railLayout),
                 isSelected
-                  ? "-translate-x-2 border-[#DFDFDC] dark:border-slate-600 bg-white dark:bg-card shadow-[0_20px_48px_rgba(57,47,38,0.14)] dark:shadow-[0_20px_48px_rgba(0,0,0,0.4)]"
+                  ? "-translate-x-2 border-[var(--rd-comment-border)] bg-[var(--rd-surface-elevated)] shadow-[var(--rd-shadow-raised)]"
                   : "",
                 isHovered && !isSelected && "cursor-pointer",
               )}
