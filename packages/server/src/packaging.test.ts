@@ -9,9 +9,7 @@ const repoRoot = path.resolve(dirname, "../../..");
 function readPackageJson(relativePath: string): {
   dependencies?: Record<string, string>;
 } {
-  return JSON.parse(
-    fs.readFileSync(path.join(repoRoot, relativePath), "utf8"),
-  );
+  return JSON.parse(fs.readFileSync(path.join(repoRoot, relativePath), "utf8"));
 }
 
 describe("published package dependencies", () => {
@@ -24,7 +22,8 @@ describe("published package dependencies", () => {
   // ERR_MODULE_NOT_FOUND.
   it("declares every @roughdraft/rfm runtime dependency in the root package", () => {
     const rootDeps = readPackageJson("package.json").dependencies ?? {};
-    const rfmDeps = readPackageJson("packages/rfm/package.json").dependencies ?? {};
+    const rfmDeps =
+      readPackageJson("packages/rfm/package.json").dependencies ?? {};
 
     const missing = Object.keys(rfmDeps).filter((dep) => !(dep in rootDeps));
 
