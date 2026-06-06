@@ -96,6 +96,46 @@ test.describe("CriticMarkup review flows", () => {
     });
   });
 
+  test("persists typed draft comment text on document save", async ({
+    page,
+  }) => {
+    writeProjectFile(
+      projectDir,
+      "draft-comment-save.md",
+      [
+        "# Draft Comment Save",
+        "",
+        "This paragraph has qua and de as short review targets.",
+        "",
+      ].join("\n"),
+    );
+
+    await openMarkdownFile(
+      page,
+      `${projectDir}/draft-comment-save.md`,
+      "rich-text",
+    );
+    await selectRichText(page, "qua");
+    await page.getByTestId("selection-menu-action-comment").click();
+    await page.getByTestId("comment-rail-c1-editor").fill("Define this term.");
+    await page.keyboard.press(
+      process.platform === "darwin" ? "Meta+S" : "Control+S",
+    );
+
+    await expect
+      .poll(() => readProjectFile(projectDir, "draft-comment-save.md"))
+      .toMatch(
+        /\{==qua==\}\{>>Define this term\.<<\}\{id="c1" by="user" at="[^"]+"\}/,
+      );
+    expect(readProjectFile(projectDir, "draft-comment-save.md")).not.toContain(
+      "{>><<}",
+    );
+
+    logE2eEvent("criticmarkup.draft-comment-text-saved", {
+      file: "draft-comment-save.md",
+    });
+  });
+
   test("shows tooltips for selection menu formatting actions", async ({
     page,
   }) => {

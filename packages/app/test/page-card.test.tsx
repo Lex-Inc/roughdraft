@@ -1618,6 +1618,51 @@ describe("PageCard editor integration", () => {
     );
   });
 
+  it("autosaves typed text from a newly-created comment draft", async () => {
+    const rendered = await renderPageCard({
+      page: {
+        id: "doc-comment-typed-draft-1",
+        title: "Doc Comment Typed Draft 1",
+        content: "Comment target text",
+      },
+      selected: true,
+    });
+
+    await selectText(rendered.getEditor(), "target");
+    await addCommentWithShortcut();
+
+    vi.useFakeTimers();
+
+    const commentEditor = queryByTestId<HTMLTextAreaElement>(
+      rendered.container,
+      "comment-banner-c1-editor",
+    );
+    expect(commentEditor).not.toBeNull();
+
+    await act(async () => {
+      if (!commentEditor) return;
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        "value",
+      )?.set;
+      valueSetter?.call(commentEditor, "Typed draft");
+      commentEditor.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+    });
+
+    expect(rendered.onSave).toHaveBeenCalledWith(
+      "doc-comment-typed-draft-1",
+      expect.stringMatching(
+        /\{==target==\}\{>>Typed draft<<\}\{id="c1" by="user" at="[^"]+"\}/,
+      ),
+    );
+    expect(rendered.onSave.mock.calls[0]?.[1]).not.toContain("{>><<}");
+  });
+
   it("opens a reply to the root comment when r is pressed in a focused thread", async () => {
     const rendered = await renderPageCard({
       page: {

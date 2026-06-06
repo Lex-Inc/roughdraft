@@ -223,9 +223,7 @@ export function CommentEditorList({
       return;
     }
 
-    if (nextContent !== comment.content) {
-      onUpdateComment(commentId, nextContent);
-    }
+    onUpdateComment(commentId, nextContent);
 
     setDrafts((current) => {
       const nextDrafts = { ...current };
@@ -297,10 +295,18 @@ export function CommentEditorList({
           renderCommentContent={renderCommentContent}
           getCommentActions={getCommentActions}
           onChangeDraft={(commentId, nextContent) => {
+            const persistedContent = commentMap.get(commentId)?.content ?? "";
+            const nextPersistedContent = nextContent.trim();
             setDrafts((current) => ({
               ...current,
               [commentId]: nextContent,
             }));
+            if (
+              nextPersistedContent.length > 0 &&
+              nextPersistedContent !== persistedContent
+            ) {
+              onUpdateComment(commentId, nextPersistedContent);
+            }
           }}
         />
       ))}
