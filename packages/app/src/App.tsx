@@ -91,8 +91,16 @@ export function shouldWarnBeforeUnload({
   );
 }
 
-const AGENT_SETUP_PROMPT =
-  "Install Roughdraft for me using `npm i -g roughdraft`, then read https://roughdraft.md/setup.md and set yourself up to use it.";
+const AGENT_SETUP_PROMPT = [
+  "Install Roughdraft for me using `npm i -g roughdraft`, then read https://roughdraft.md/setup.md and set yourself up to use it.",
+  "",
+  "When updating persistent agent guidance, replace only this managed block:",
+  "<!-- roughdraft:begin - managed setup, do not edit by hand -->",
+  'Use `roughdraft open "/absolute/path/to/file.md"` when I ask to review Markdown in Roughdraft. Keep the command running until I click Done Reviewing, then read the updated Markdown file and respond to any CriticMarkup comments or suggestions.',
+  "<!-- roughdraft:end -->",
+  "",
+  "Do not edit global agent instruction files unless I explicitly authorize that target. Prefer project-local files such as AGENTS.md or CLAUDE.md when persistent guidance is needed.",
+].join("\n");
 const PREVIEW_DOCUMENT_PATH = "preview.md";
 const PREVIEW_INITIAL_MARKDOWN = [
   "# Live Preview",
@@ -443,7 +451,7 @@ export function Homepage({
                   </DialogHeader>
 
                   <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-4">
-                    <p className="break-words text-sm leading-6 text-stone-800 dark:text-stone-200">
+                    <p className="whitespace-pre-wrap break-words text-sm leading-6 text-stone-800 dark:text-stone-200">
                       {AGENT_SETUP_PROMPT}
                     </p>
                     {copyState === "error" ? (

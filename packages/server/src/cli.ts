@@ -21,7 +21,16 @@ import { resolveUpdateStatus, type UpdateStatus } from "./update-status.js";
 const AGENT_SETUP_URL = "https://roughdraft.md/setup.md";
 const ROUGHDRAFT_FLAVORED_MARKDOWN_SPEC_URL =
   "https://roughdraft.md/spec/roughdraft-flavored-markdown.md";
-const AGENT_SETUP_PROMPT = `Install Roughdraft for me using \`npm i -g roughdraft\`, then read ${AGENT_SETUP_URL} and set yourself up to use it.`;
+const AGENT_SETUP_PROMPT = [
+  `Install Roughdraft for me using \`npm i -g roughdraft\`, then read ${AGENT_SETUP_URL} and set yourself up to use it.`,
+  "",
+  "When updating persistent agent guidance, replace only this managed block:",
+  "<!-- roughdraft:begin - managed setup, do not edit by hand -->",
+  'Use `roughdraft open "/absolute/path/to/file.md"` when I ask to review Markdown in Roughdraft. Keep the command running until I click Done Reviewing, then read the updated Markdown file and respond to any CriticMarkup comments or suggestions.',
+  "<!-- roughdraft:end -->",
+  "",
+  "Do not edit global agent instruction files unless I explicitly authorize that target. Prefer project-local files such as AGENTS.md or CLAUDE.md when persistent guidance is needed.",
+].join("\n");
 const STATUS_PATH = "/api/status";
 const STATUS_TIMEOUT_MS = 750;
 const SERVER_WAIT_ATTEMPTS = 40;

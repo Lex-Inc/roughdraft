@@ -1421,13 +1421,21 @@ describe("cli", () => {
     const test = createTestDependencies();
 
     const exitCode = await runCli(["help", "agent"], test.deps);
+    const output = test.logs.join("\n");
 
     expect(exitCode).toBe(0);
     expect(test.logs).toContain(
       "To set up your coding agent, paste this into it:",
     );
-    expect(test.logs).toContain(
+    expect(output).toContain(
       "Install Roughdraft for me using `npm i -g roughdraft`, then read https://roughdraft.md/setup.md and set yourself up to use it.",
+    );
+    expect(output).toContain(
+      "<!-- roughdraft:begin - managed setup, do not edit by hand -->",
+    );
+    expect(output).toContain("<!-- roughdraft:end -->");
+    expect(output).toContain(
+      "Do not edit global agent instruction files unless I explicitly authorize that target.",
     );
     expect(test.logs).toContain(
       "This command only prints setup text. It does not edit agent instruction files.",

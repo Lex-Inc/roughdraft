@@ -7,6 +7,13 @@ Paste this into your coding agent:
 
 ```text
 Install Roughdraft for me using `npm i -g roughdraft`, then read https://roughdraft.md/setup.md and set yourself up to use it.
+
+When updating persistent agent guidance, replace only this managed block:
+<!-- roughdraft:begin - managed setup, do not edit by hand -->
+Use `roughdraft open "/absolute/path/to/file.md"` when I ask to review Markdown in Roughdraft. Keep the command running until I click Done Reviewing, then read the updated Markdown file and respond to any CriticMarkup comments or suggestions.
+<!-- roughdraft:end -->
+
+Do not edit global agent instruction files unless I explicitly authorize that target. Prefer project-local files such as AGENTS.md or CLAUDE.md when persistent guidance is needed.
 ```
 
 Or install and open a file yourself:
@@ -65,6 +72,8 @@ roughdraft stop
 `roughdraft open` will reuse the running server and auto-start it if needed. You can also use `roughdraft ./path/to/file.md` as a shortcut when the input clearly looks like a path.
 
 Roughdraft does not edit `~/CLAUDE.md`, `~/AGENTS.md`, or other user-level agent files. The setup prompt asks your agent to update its own guidance.
+
+The setup prompt includes `roughdraft:begin` / `roughdraft:end` markers so an agent can update Roughdraft-specific guidance later without rewriting unrelated instructions.
 
 If the local server is already running, you can also open a file directly by URL:
 
@@ -166,6 +175,13 @@ If you want your local agent to remember the Roughdraft workflow, ask it to read
 
 ```text
 Install Roughdraft for me using `npm i -g roughdraft`, then read https://roughdraft.md/setup.md and set yourself up to use it.
+
+When updating persistent agent guidance, replace only this managed block:
+<!-- roughdraft:begin - managed setup, do not edit by hand -->
+Use `roughdraft open "/absolute/path/to/file.md"` when I ask to review Markdown in Roughdraft. Keep the command running until I click Done Reviewing, then read the updated Markdown file and respond to any CriticMarkup comments or suggestions.
+<!-- roughdraft:end -->
+
+Do not edit global agent instruction files unless I explicitly authorize that target. Prefer project-local files such as AGENTS.md or CLAUDE.md when persistent guidance is needed.
 ```
 
 Use `roughdraft help`, `roughdraft help agent`, or `roughdraft help criticmarkup` if you need a local refresher.
