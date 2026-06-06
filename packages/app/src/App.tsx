@@ -1947,6 +1947,7 @@ export function App() {
         onKeepEditingWithoutAutosave={handleKeepEditingWithoutAutosave}
         onOverwriteDocumentOnDisk={handleOverwriteDocumentOnDisk}
         onCompleteReview={handleCompleteReview}
+        openReviewRailByDefault={!!activeDocumentPath}
         backend={backend}
       />
     </main>

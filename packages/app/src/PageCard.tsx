@@ -59,6 +59,7 @@ interface PageCardProps {
   onSaveStateChange?: (state: DocumentSaveState) => void;
   editorViewMode?: EditorViewMode;
   interactionMode?: DocumentInteractionMode;
+  openReviewRailByDefault?: boolean;
   backend: StorageBackend;
   onEditorReady?: (editor: Editor | null) => void;
   onCommentRailPresenceChange?: (hasCommentRailSpace: boolean) => void;
@@ -79,6 +80,7 @@ interface PageCardEditorSurfaceProps {
   onSaveStateChange: (state: DocumentSaveState) => void;
   editorViewMode: EditorViewMode;
   interactionMode: DocumentInteractionMode;
+  openReviewRailByDefault: boolean;
   backend: StorageBackend;
   onEditorReady?: (editor: Editor | null) => void;
   onCommentRailPresenceChange?: (hasCommentRailSpace: boolean) => void;
@@ -98,6 +100,7 @@ interface RichTextEditorSurfaceProps {
   sourceMarkdown: string;
   onMarkdownChange: (markdown: string) => void;
   interactionMode: DocumentInteractionMode;
+  openReviewRailByDefault: boolean;
   backend: StorageBackend;
   onEditorReady?: (editor: Editor | null) => void;
   onCommentRailPresenceChange?: (hasCommentRailSpace: boolean) => void;
@@ -597,6 +600,7 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
   sourceMarkdown,
   onMarkdownChange,
   interactionMode,
+  openReviewRailByDefault,
   backend,
   onEditorReady,
   onCommentRailPresenceChange,
@@ -662,9 +666,14 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
 
   useEffect(() => {
     onCommentRailPresenceChange?.(
-      comments.size > 0 || criticChanges.length > 0,
+      openReviewRailByDefault || comments.size > 0 || criticChanges.length > 0,
     );
-  }, [comments.size, criticChanges.length, onCommentRailPresenceChange]);
+  }, [
+    comments.size,
+    criticChanges.length,
+    onCommentRailPresenceChange,
+    openReviewRailByDefault,
+  ]);
 
   const emitMarkdownChange = useCallback(
     (doc?: JSONContent, nextComments?: Map<string, CriticComment>) => {
@@ -1859,7 +1868,8 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
     );
   }, []);
 
-  const hasReviewRail = comments.size > 0 || criticChanges.length > 0;
+  const hasReviewRail =
+    openReviewRailByDefault || comments.size > 0 || criticChanges.length > 0;
   const activeComments = activeCommentIds
     .map((commentId) => comments.get(commentId))
     .filter((comment): comment is CriticComment => Boolean(comment));
@@ -1961,7 +1971,7 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
         <DocumentReviewRail
           className={reviewRailClass}
           layout={layout === "embedded-demo" ? "flow" : "anchored"}
-          testId="document-review-rail"
+          testId={hasReviewRail ? "document-review-rail" : undefined}
           commentGroups={commentGroups}
           comments={comments}
           suggestions={criticChanges}
@@ -2078,6 +2088,7 @@ const PageCardEditorSurface = memo(function PageCardEditorSurface({
   onSaveStateChange,
   editorViewMode,
   interactionMode,
+  openReviewRailByDefault,
   backend,
   onEditorReady,
   onCommentRailPresenceChange,
@@ -2305,8 +2316,8 @@ const PageCardEditorSurface = memo(function PageCardEditorSurface({
   }, []);
 
   const hasCommentRailSpace = useMemo(
-    () => criticMarkdownHasReviewRail(markdown),
-    [markdown],
+    () => openReviewRailByDefault || criticMarkdownHasReviewRail(markdown),
+    [markdown, openReviewRailByDefault],
   );
 
   useEffect(() => {
@@ -2345,6 +2356,7 @@ const PageCardEditorSurface = memo(function PageCardEditorSurface({
       onMarkdownChange={handleMarkdownChange}
       interactionMode={interactionMode}
       onCommentRailPresenceChange={onCommentRailPresenceChange}
+      openReviewRailByDefault={openReviewRailByDefault}
       backend={backend}
       onEditorReady={onEditorReady}
     />
@@ -2361,6 +2373,7 @@ export function PageCard({
   onSaveStateChange,
   editorViewMode = "rich-text",
   interactionMode = "editing",
+  openReviewRailByDefault = false,
   backend,
   onEditorReady,
   onCommentRailPresenceChange,
@@ -2388,6 +2401,7 @@ export function PageCard({
         onSaveStateChange={setSaveState}
         editorViewMode={editorViewMode}
         interactionMode={interactionMode}
+        openReviewRailByDefault={openReviewRailByDefault}
         backend={backend}
         onEditorReady={onEditorReady}
         onCommentRailPresenceChange={onCommentRailPresenceChange}

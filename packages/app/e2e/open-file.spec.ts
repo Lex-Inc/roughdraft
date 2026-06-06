@@ -57,7 +57,7 @@ test.describe("opening local markdown files", () => {
       ),
     );
 
-    await openMarkdownFile(page, filePath);
+    await openMarkdownFile(page, filePath, "rich-text");
 
     const editor = page.getByTestId("rich-text-editor");
     await expect(editor).toContainText("Smoke Fixture");
@@ -78,6 +78,34 @@ test.describe("opening local markdown files", () => {
     logE2eEvent("open-file.rendered", {
       projectDir,
       file: "review.md",
+    });
+  });
+
+  test("opens the review rail for a fresh file review", async ({ page }) => {
+    const filePath = writeProjectFile(
+      projectDir,
+      "fresh-review.md",
+      "# Fresh Review\n\nA paragraph ready for comments.\n",
+    );
+
+    await openMarkdownFile(page, filePath, "rich-text");
+
+    const documentShell = page
+      .getByTestId("page-card-rich-text")
+      .getByTestId("document-page-shell");
+    await expect(documentShell).toBeVisible();
+    await expect(page.getByTestId("document-review-rail")).toBeAttached();
+    await expect
+      .poll(() =>
+        documentShell.evaluate((element) =>
+          element.classList.contains("document-page-shell-no-comments"),
+        ),
+      )
+      .toBe(false);
+
+    logE2eEvent("open-file.fresh-review-rail-open", {
+      projectDir,
+      file: "fresh-review.md",
     });
   });
 

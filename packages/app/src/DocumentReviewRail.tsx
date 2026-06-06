@@ -411,7 +411,13 @@ export function DocumentReviewRail({
 
   const hasDraftOnly = layouts.length === 0 && !draftSuggestion;
   if (hasDraftOnly) {
-    return <aside className={cn("min-w-0", className)} aria-hidden="true" />;
+    return (
+      <aside
+        className={cn("min-w-0", className)}
+        data-testid={testId}
+        aria-hidden="true"
+      />
+    );
   }
 
   return (

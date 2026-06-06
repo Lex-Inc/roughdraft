@@ -274,6 +274,7 @@ interface DocumentWorkspaceProps {
   onCompleteReview: (
     options?: CompleteReviewOptions,
   ) => Promise<{ delivered: boolean }>;
+  openReviewRailByDefault?: boolean;
   backend: StorageBackend | null;
 }
 
@@ -293,6 +294,7 @@ export function DocumentWorkspace({
   onKeepEditingWithoutAutosave,
   onOverwriteDocumentOnDisk,
   onCompleteReview,
+  openReviewRailByDefault = false,
   backend,
 }: DocumentWorkspaceProps) {
   const [documentInteractionMode, setDocumentInteractionMode] =
@@ -336,18 +338,19 @@ export function DocumentWorkspace({
     [onDocumentSaveStateChange],
   );
 
-  const [documentHasComments, setDocumentHasComments] = useState(
-    () =>
-      !!documentPage?.content &&
-      criticMarkdownHasReviewRail(documentPage.content),
+  const shouldShowReviewRail = useCallback(
+    (content?: string | null) =>
+      openReviewRailByDefault ||
+      (!!content && criticMarkdownHasReviewRail(content)),
+    [openReviewRailByDefault],
+  );
+  const [documentHasComments, setDocumentHasComments] = useState(() =>
+    shouldShowReviewRail(documentPage?.content),
   );
 
   useEffect(() => {
-    setDocumentHasComments(
-      !!documentPage?.content &&
-        criticMarkdownHasReviewRail(documentPage.content),
-    );
-  }, [documentPage?.content]);
+    setDocumentHasComments(shouldShowReviewRail(documentPage?.content));
+  }, [documentPage?.content, shouldShowReviewRail]);
 
   useEffect(() => {
     const documentIdentity = `${activeDocumentPath ?? ""}:${documentPage?.id ?? ""}`;
@@ -989,6 +992,7 @@ export function DocumentWorkspace({
               onSaveStateChange={handleSaveStateChange}
               editorViewMode={documentEditorViewMode}
               interactionMode={documentInteractionMode}
+              openReviewRailByDefault={openReviewRailByDefault}
               backend={backend}
               onCommentRailPresenceChange={setDocumentHasComments}
               onDirtyStateChange={onDocumentDirtyStateChange}
