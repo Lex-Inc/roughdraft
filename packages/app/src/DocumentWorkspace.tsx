@@ -5,6 +5,8 @@ import {
   ChevronDown,
   CodeXml,
   Eye,
+  Files,
+  FileText,
   Loader2,
   MessageSquarePlus,
   Palette,
@@ -60,7 +62,12 @@ import {
   type DocumentSaveState,
   PageCard,
 } from "./PageCard";
-import type { CompleteReviewOptions, Page, StorageBackend } from "./storage";
+import type {
+  CompleteReviewOptions,
+  Page,
+  ProjectMarkdownFile,
+  StorageBackend,
+} from "./storage";
 
 type DiskChangeState = "clean" | "changed" | "conflict" | "paused";
 type ReviewHandoffState =
@@ -111,6 +118,11 @@ const fileCopyMenuOptions = [
   action: FileCopyAction;
   label: string;
 }[];
+
+function projectFileButtonTestId(path: string) {
+  const slug = path.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return `document-project-file-${slug || "root"}`;
+}
 
 async function writePlainTextToClipboard(text: string) {
   await navigator.clipboard.writeText(text);
@@ -266,6 +278,7 @@ interface DocumentWorkspaceProps {
   onDocumentSaveStateChange: (state: DocumentSaveState) => void;
   onDocumentDirtyStateChange: (isDirty: boolean) => void;
   onDocumentLocalContentChange: (markdown: string) => void;
+  onOpenProjectFile?: (path: string) => void | Promise<void>;
   documentDiskChangeState: DiskChangeState;
   documentForceResetKey: string | null;
   onReloadDocumentFromDisk: () => void | Promise<void>;
@@ -288,6 +301,7 @@ export function DocumentWorkspace({
   onDocumentSaveStateChange,
   onDocumentDirtyStateChange,
   onDocumentLocalContentChange,
+  onOpenProjectFile,
   documentDiskChangeState,
   documentForceResetKey,
   onReloadDocumentFromDisk,
@@ -306,6 +320,14 @@ export function DocumentWorkspace({
   const [reviewHandoffPopoverOpen, setReviewHandoffPopoverOpen] =
     useState(false);
   const [fileCopyMenuOpen, setFileCopyMenuOpen] = useState(false);
+  const [projectFilesMenuOpen, setProjectFilesMenuOpen] = useState(false);
+  const [projectFiles, setProjectFiles] = useState<ProjectMarkdownFile[]>([]);
+  const [projectFilesState, setProjectFilesState] = useState<
+    "idle" | "loading" | "error"
+  >("idle");
+  const [openingProjectFilePath, setOpeningProjectFilePath] = useState<
+    string | null
+  >(null);
   const [copiedFileAction, setCopiedFileAction] =
     useState<FileCopyAction | null>(null);
   const [themePreference, setThemePreference] =
@@ -319,6 +341,10 @@ export function DocumentWorkspace({
   const [overallComment, setOverallComment] = useState("");
   const sawNoWatcherAfterNotifiedRef = useRef(false);
   const saveControllerRef = useRef<DocumentSaveController | null>(null);
+  const backendProjectPath = backend?.info.projectPath ?? null;
+  const canListProjectFiles = Boolean(
+    backend?.listProjectMarkdownFiles && backendProjectPath,
+  );
 
   useEffect(
     () =>
@@ -328,6 +354,39 @@ export function DocumentWorkspace({
         setEditorWidth(getStoredRoughdraftEditorWidth());
       }),
     [],
+  );
+
+  const loadProjectFiles = useCallback(async () => {
+    if (!backend?.listProjectMarkdownFiles || !backendProjectPath) {
+      setProjectFiles([]);
+      setProjectFilesState("idle");
+      return;
+    }
+
+    setProjectFilesState("loading");
+    try {
+      const files = await backend.listProjectMarkdownFiles();
+      setProjectFiles(files);
+      setProjectFilesState("idle");
+    } catch (error) {
+      console.error("Failed to load project markdown files:", error);
+      setProjectFiles([]);
+      setProjectFilesState("error");
+    }
+  }, [backend, backendProjectPath]);
+
+  useEffect(() => {
+    void loadProjectFiles();
+  }, [loadProjectFiles]);
+
+  const handleProjectFilesMenuOpenChange = useCallback(
+    (open: boolean) => {
+      setProjectFilesMenuOpen(open);
+      if (open) {
+        void loadProjectFiles();
+      }
+    },
+    [loadProjectFiles],
   );
 
   const handleSaveStateChange = useCallback(
@@ -494,6 +553,36 @@ export function DocumentWorkspace({
       }
     },
     [activeDocumentPath, documentFilenameLabel, documentPage],
+  );
+
+  const handleOpenProjectFile = useCallback(
+    async (path: string) => {
+      if (!onOpenProjectFile) return;
+
+      if (path === activeDocumentPath) {
+        setProjectFilesMenuOpen(false);
+        return;
+      }
+
+      const flushResult = await saveControllerRef.current?.flushSave();
+      if (
+        flushResult?.status === "blocked" ||
+        flushResult?.status === "error"
+      ) {
+        return;
+      }
+
+      setOpeningProjectFilePath(path);
+      try {
+        await onOpenProjectFile(path);
+        setProjectFilesMenuOpen(false);
+      } catch (error) {
+        console.error("Failed to open project markdown file:", error);
+      } finally {
+        setOpeningProjectFilePath(null);
+      }
+    },
+    [activeDocumentPath, onOpenProjectFile],
   );
 
   const editorViewModeToggleLabel =
@@ -803,6 +892,91 @@ export function DocumentWorkspace({
                   />
                   <TooltipContent>{editorViewModeToggleLabel}</TooltipContent>
                 </Tooltip>
+                {canListProjectFiles && onOpenProjectFile ? (
+                  <Popover
+                    open={projectFilesMenuOpen}
+                    onOpenChange={handleProjectFilesMenuOpenChange}
+                  >
+                    <PopoverTrigger
+                      render={
+                        <button
+                          type="button"
+                          data-testid="document-project-files-trigger"
+                          className="inline-flex size-[1.5rem] shrink-0 items-center justify-center rounded-full text-[var(--rd-muted-foreground)] outline-none transition hover:bg-[var(--rd-hover)] hover:text-[var(--rd-app-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--rd-ring)]"
+                          title="Project files"
+                          aria-label="Project files"
+                        >
+                          <Files className="size-[0.78rem]" />
+                        </button>
+                      }
+                    />
+                    <PopoverContent
+                      aria-label="Project files"
+                      data-testid="document-project-files-menu"
+                      className="w-72 p-1"
+                      align="start"
+                    >
+                      <div className="border-b border-[var(--rd-menu-border)] px-2 py-1.5 text-[0.62rem] leading-none font-semibold tracking-[0.08em] text-[var(--rd-muted-foreground)] uppercase">
+                        Project files
+                      </div>
+                      <div className="max-h-72 overflow-y-auto py-1">
+                        {projectFilesState === "loading" ? (
+                          <div className="flex h-8 items-center gap-2 px-2 text-[0.72rem] text-[var(--rd-muted-foreground)]">
+                            <Loader2 className="size-3 animate-spin" />
+                            <span>Loading files</span>
+                          </div>
+                        ) : projectFilesState === "error" ? (
+                          <div className="px-2 py-2 text-[0.72rem] leading-snug text-red-600 dark:text-red-400">
+                            Could not load files.
+                          </div>
+                        ) : projectFiles.length === 0 ? (
+                          <div className="px-2 py-2 text-[0.72rem] leading-snug text-[var(--rd-muted-foreground)]">
+                            No Markdown files found.
+                          </div>
+                        ) : (
+                          projectFiles.map((file) => {
+                            const isActiveFile =
+                              file.path === activeDocumentPath;
+                            const isOpening =
+                              openingProjectFilePath === file.path;
+                            return (
+                              <button
+                                key={file.path}
+                                type="button"
+                                data-testid={projectFileButtonTestId(file.path)}
+                                className={cn(
+                                  "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[0.72rem] leading-none outline-none transition hover:bg-[var(--rd-menu-hover)] focus-visible:bg-[var(--rd-menu-hover)]",
+                                  isActiveFile
+                                    ? "text-[var(--rd-app-foreground)]"
+                                    : "text-[var(--rd-menu-foreground)]",
+                                )}
+                                aria-current={isActiveFile ? "page" : undefined}
+                                disabled={
+                                  isActiveFile ||
+                                  openingProjectFilePath !== null
+                                }
+                                onClick={() =>
+                                  void handleOpenProjectFile(file.path)
+                                }
+                              >
+                                {isOpening ? (
+                                  <Loader2 className="size-3 shrink-0 animate-spin text-[var(--rd-muted-foreground)]" />
+                                ) : isActiveFile ? (
+                                  <Check className="size-3 shrink-0 text-[var(--rd-muted-foreground)]" />
+                                ) : (
+                                  <FileText className="size-3 shrink-0 text-[var(--rd-muted-foreground)]" />
+                                )}
+                                <span className="min-w-0 truncate font-mono">
+                                  {file.path}
+                                </span>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                ) : null}
                 <Popover
                   open={fileCopyMenuOpen}
                   onOpenChange={setFileCopyMenuOpen}

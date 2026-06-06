@@ -14,6 +14,39 @@ import {
   writeProjectFile,
 } from "./helpers";
 
+function parseRgbColor(color: string) {
+  const [red = 0, green = 0, blue = 0] =
+    color.match(/\d+(\.\d+)?/g)?.map(Number) ?? [];
+  return { red, green, blue };
+}
+
+function relativeLuminance({
+  red,
+  green,
+  blue,
+}: ReturnType<typeof parseRgbColor>) {
+  const channels = [red, green, blue].map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.03928
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+
+  return (
+    0.2126 * (channels[0] ?? 0) +
+    0.7152 * (channels[1] ?? 0) +
+    0.0722 * (channels[2] ?? 0)
+  );
+}
+
+function contrastRatio(foreground: string, background: string) {
+  const foregroundLuminance = relativeLuminance(parseRgbColor(foreground));
+  const backgroundLuminance = relativeLuminance(parseRgbColor(background));
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 test.describe("markdown round-trips", () => {
   let projectDir: string;
 
@@ -108,6 +141,44 @@ test.describe("markdown round-trips", () => {
 
     logE2eEvent("markdown-roundtrip.initial-saved", {
       file: "initial-saved.md",
+    });
+  });
+
+  test("dark theme keeps rendered document text readable", async ({ page }) => {
+    const filePath = writeProjectFile(
+      projectDir,
+      "dark-readable.md",
+      "# Dark Readable\n\nBody text remains readable.\n",
+    );
+
+    await page.addInitScript(() => {
+      window.localStorage.setItem("roughdraft.theme", "quiet-dark");
+    });
+    await openMarkdownFile(page, filePath, "rich-text");
+
+    const colors = await page
+      .getByTestId("document-content-card")
+      .evaluate((element) => {
+        const editor = element.querySelector(".ProseMirror");
+        if (!editor) throw new Error("Expected rendered editor");
+        const editorStyle = window.getComputedStyle(editor);
+        const cardStyle = window.getComputedStyle(element);
+        return {
+          foreground: editorStyle.color,
+          background: cardStyle.backgroundColor,
+        };
+      });
+
+    expect(contrastRatio(colors.foreground, colors.background)).toBeGreaterThan(
+      4.5,
+    );
+    await expect(richTextEditor(page)).toContainText(
+      "Body text remains readable.",
+    );
+
+    logE2eEvent("markdown-roundtrip.dark-theme-readable", {
+      file: "dark-readable.md",
+      ...colors,
     });
   });
 
@@ -423,6 +494,51 @@ test.describe("markdown round-trips", () => {
 
     logE2eEvent("markdown-roundtrip.save-default-prevented", {
       file: "prevent-default.md",
+    });
+  });
+
+  test("switches between project Markdown files from inside the app", async ({
+    page,
+  }) => {
+    const planPath = writeProjectFile(
+      projectDir,
+      "PLAN.md",
+      "# Plan\n\nStart here.\n",
+    );
+    writeProjectFile(projectDir, "SPEC.md", "# Spec\n\nTarget spec.\n");
+    writeProjectFile(
+      projectDir,
+      "notes/STATUS.md",
+      "# Status\n\nNested status.\n",
+    );
+    writeProjectFile(projectDir, "notes/ignore.txt", "Not markdown.\n");
+
+    await openMarkdownFile(page, planPath, "rich-text");
+    await expect(richTextEditor(page)).toContainText("Start here.");
+
+    await page.getByTestId("document-project-files-trigger").click();
+    await expect(page.getByTestId("document-project-files-menu")).toBeVisible();
+    await expect(
+      page.getByTestId("document-project-file-SPEC-md"),
+    ).toContainText("SPEC.md");
+    await expect(
+      page.getByTestId("document-project-file-notes-STATUS-md"),
+    ).toContainText("notes/STATUS.md");
+    await expect(
+      page.getByTestId("document-project-files-menu"),
+    ).not.toContainText("ignore.txt");
+
+    await page.getByTestId("document-project-file-SPEC-md").click();
+
+    await expect(richTextEditor(page)).toContainText("Target spec.");
+    await expect(page.getByTestId("document-file-menu-trigger")).toContainText(
+      "SPEC.md",
+    );
+    await expect(page).toHaveURL(/path=.*SPEC\.md/);
+
+    logE2eEvent("markdown-roundtrip.project-file-switched", {
+      from: "PLAN.md",
+      to: "SPEC.md",
     });
   });
 });

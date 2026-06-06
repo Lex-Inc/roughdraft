@@ -5,6 +5,7 @@ import {
   type MarkdownFileChangeEvent,
   MarkdownFileConflictError,
   type Page,
+  type ProjectMarkdownFile,
   type ReviewWatchStatus,
   type StorageBackend,
   type StoredAsset,
@@ -159,6 +160,29 @@ export class ApiBackend implements StorageBackend {
       watcherCount:
         typeof payload.watcherCount === "number" ? payload.watcherCount : 0,
     };
+  }
+
+  async listProjectMarkdownFiles(): Promise<ProjectMarkdownFile[]> {
+    const res = await fetch(this.buildUrl("/api/file-tree"));
+    if (!res.ok) {
+      throw new Error(`Failed to list project markdown files: ${res.status}`);
+    }
+
+    const payload = (await res.json()) as { paths?: unknown };
+    const paths = Array.isArray(payload.paths) ? payload.paths : [];
+    return paths
+      .filter(
+        (path): path is string =>
+          typeof path === "string" &&
+          !path.endsWith("/") &&
+          path.toLowerCase().endsWith(".md"),
+      )
+      .sort(
+        (left, right) =>
+          left.split("/").length - right.split("/").length ||
+          left.localeCompare(right, undefined, { numeric: true }),
+      )
+      .map((path) => ({ path }));
   }
 
   async saveAsset(file: File): Promise<StoredAsset> {

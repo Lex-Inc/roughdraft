@@ -27,6 +27,10 @@ export interface StoredAsset {
   mimeType: string;
 }
 
+export interface ProjectMarkdownFile {
+  path: string;
+}
+
 export interface CompleteReviewResult {
   delivered: boolean;
 }
@@ -67,6 +71,7 @@ export interface StorageBackend {
     options?: CompleteReviewOptions,
   ): Promise<CompleteReviewResult>;
   getReviewWatchStatus?(relativePath: string): Promise<ReviewWatchStatus>;
+  listProjectMarkdownFiles?(): Promise<ProjectMarkdownFile[]>;
   saveAsset(file: File): Promise<StoredAsset>;
   resolveFileUrl(path: string): string | null;
   openProject(path: string): Promise<void>;

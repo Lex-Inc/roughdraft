@@ -1531,6 +1531,21 @@ export function App() {
     [applyDocumentPage],
   );
 
+  const handleOpenProjectFile = useCallback(
+    async (relativePath: string) => {
+      const currentBackend = backendRef.current;
+      const projectPath = currentBackend?.info.projectPath;
+      if (!currentBackend || !projectPath) return;
+
+      const nextDocument = await loadDocument(currentBackend, relativePath);
+      setDocumentForceResetKey(
+        `${relativePath}:${nextDocument.version ?? Date.now()}:project-file`,
+      );
+      syncRequestedPathInUrl(joinPath(projectPath, relativePath));
+    },
+    [loadDocument],
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -1949,6 +1964,7 @@ export function App() {
         onDocumentSaveStateChange={handleDocumentSaveStateChange}
         onDocumentDirtyStateChange={handleDocumentDirtyStateChange}
         onDocumentLocalContentChange={handleDocumentLocalContentChange}
+        onOpenProjectFile={handleOpenProjectFile}
         documentDiskChangeState={documentDiskChangeState}
         documentForceResetKey={documentForceResetKey}
         onReloadDocumentFromDisk={handleReloadDocumentFromDisk}
