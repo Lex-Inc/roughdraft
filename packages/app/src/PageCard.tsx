@@ -688,11 +688,12 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
           {
             frontmatter: frontmatterRef.current,
             endmatter: endmatterRef.current,
+            sourceMarkdown,
           },
         ),
       );
     },
-    [onMarkdownChange],
+    [onMarkdownChange, sourceMarkdown],
   );
 
   const insertFiles = useCallback(

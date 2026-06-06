@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { criticMarkdownToEditorState } from "./critic-markup";
 import {
   mermaidBlockAttribute,
+  preserveSourceMarkdownFormatting,
   rawMarkdownBlockAttribute,
   splitYamlFrontmatter,
   toHtml,
@@ -152,6 +153,46 @@ describe("normalizeBlockSpacing", () => {
     ].join("\n");
 
     expect(toMarkdown(toHtml(input))).toBe(input);
+  });
+});
+
+describe("preserveSourceMarkdownFormatting", () => {
+  it("keeps unchanged thematic break and table divider source styles", () => {
+    const source = [
+      "# Draft",
+      "",
+      "---",
+      "",
+      "| Key | Value |",
+      "|---|---|",
+      "| alpha | beta |",
+      "",
+    ].join("\n");
+    const serialized = [
+      "# Draft",
+      "",
+      "* * *",
+      "",
+      "| Key | Value |",
+      "| --- | --- |",
+      "| alpha | beta |",
+      "",
+    ].join("\n");
+
+    expect(preserveSourceMarkdownFormatting(serialized, source)).toContain(
+      "---\n\n| Key | Value |\n|---|---|",
+    );
+  });
+
+  it("keeps unchanged source blockquote line breaks", () => {
+    const source = ["> First quoted line", "> Second quoted line", ""].join(
+      "\n",
+    );
+    const serialized = ["> First quoted line Second quoted line", ""].join(
+      "\n",
+    );
+
+    expect(preserveSourceMarkdownFormatting(serialized, source)).toBe(source);
   });
 });
 

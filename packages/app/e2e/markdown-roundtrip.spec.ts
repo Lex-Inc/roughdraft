@@ -10,6 +10,7 @@ import {
   readProjectFile,
   removeMarkdownProject,
   richTextEditor,
+  selectRichText,
   writeProjectFile,
 } from "./helpers";
 
@@ -207,6 +208,54 @@ test.describe("markdown round-trips", () => {
     logE2eEvent("markdown-roundtrip.task-list-save", {
       file: "task-list.md",
       size: fs.statSync(filePath).size,
+    });
+  });
+
+  test("rich-text comments avoid unrelated Markdown formatting churn", async ({
+    page,
+  }) => {
+    const initial = [
+      "# Formatting Churn",
+      "",
+      "This paragraph has target text for review.",
+      "",
+      "---",
+      "",
+      "| Key | Value |",
+      "|---|---|",
+      "| alpha | beta |",
+      "",
+      "> First quoted line",
+      "> Second quoted line",
+      "",
+    ].join("\n");
+    writeProjectFile(projectDir, "formatting-churn.md", initial);
+
+    await openMarkdownFile(
+      page,
+      `${projectDir}/formatting-churn.md`,
+      "rich-text",
+    );
+    await selectRichText(page, "target text");
+    await page.getByTestId("selection-menu-action-comment").click();
+    await page.getByTestId("comment-rail-c1-editor").fill("Check this text.");
+    await page.keyboard.press(
+      process.platform === "darwin" ? "Meta+S" : "Control+S",
+    );
+
+    await expect
+      .poll(() => readProjectFile(projectDir, "formatting-churn.md"))
+      .toContain("Check this text.");
+    const saved = readProjectFile(projectDir, "formatting-churn.md");
+    expect(saved).toContain("---\n\n| Key | Value |\n|---|---|");
+    expect(saved).toContain("> First quoted line\n> Second quoted line");
+    expect(saved).not.toContain("* * *");
+    expect(saved).not.toContain("| --- | --- |");
+    expect(saved).not.toContain("> First quoted line\n>\n> Second quoted line");
+
+    logE2eEvent("markdown-roundtrip.formatting-churn-avoided", {
+      file: "formatting-churn.md",
+      size: fs.statSync(`${projectDir}/formatting-churn.md`).size,
     });
   });
 

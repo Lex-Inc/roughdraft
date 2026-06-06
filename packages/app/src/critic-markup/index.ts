@@ -21,6 +21,7 @@ import {
   createTurndownService,
   type MarkdownOptions,
   normalizeBlockSpacing,
+  preserveSourceMarkdownFormatting,
   prependYamlFrontmatter,
   protectRichTextRoundTripMarkdown,
   splitYamlDocumentMetadata,
@@ -1755,7 +1756,11 @@ function collectCriticChangesFromDoc(
 export function editorStateToCriticMarkdown(
   doc: JSONContent,
   comments: Map<string, CriticComment>,
-  options?: { frontmatter?: string | null; endmatter?: string | null },
+  options?: {
+    frontmatter?: string | null;
+    endmatter?: string | null;
+    sourceMarkdown?: string | null;
+  },
 ): string {
   const html = generateHTML(doc, extensions);
   const service = createTurndownService();
@@ -1777,11 +1782,15 @@ export function editorStateToCriticMarkdown(
     comments,
     changes,
   );
+  const sourceBody = options?.sourceMarkdown
+    ? splitYamlDocumentMetadata(options.sourceMarkdown).body
+    : null;
+  const body = preserveSourceMarkdownFormatting(
+    normalizeBlockSpacing(`${service.turndown(html).trimEnd()}\n`),
+    sourceBody,
+  );
   return appendYamlEndmatter(
-    prependYamlFrontmatter(
-      normalizeBlockSpacing(`${service.turndown(html).trimEnd()}\n`),
-      frontmatter,
-    ),
+    prependYamlFrontmatter(body, frontmatter),
     endmatter,
   );
 }

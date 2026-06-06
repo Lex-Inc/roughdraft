@@ -456,6 +456,7 @@ export function createTurndownService(): TurndownService {
     headingStyle: "atx",
     codeBlockStyle: "fenced",
     bulletListMarker: "-",
+    hr: "---",
     blankReplacement(_content, node) {
       if (node.hasAttribute(rawMarkdownBlockAttribute)) {
         return `\n\n${decodeRawMarkdownBlock(
@@ -653,6 +654,191 @@ export function normalizeBlockSpacing(md: string): string {
   // Remove blank line immediately after a heading line.
   normalized = normalized.replace(/(^#{1,6} [^\n]+)\n\n/gm, "$1\n");
   return normalized;
+}
+
+function splitMarkdownLines(markdown: string): string[] {
+  return markdown.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+}
+
+function isThematicBreakLine(line: string): boolean {
+  const trimmed = line.trim();
+  return (
+    /^(?:-{3,}|\*{3,}|_{3,})$/.test(trimmed) ||
+    /^(?:\*\s+){2,}\*$/.test(trimmed) ||
+    /^(?:-\s+){2,}-$/.test(trimmed) ||
+    /^(?:_\s+){2,}_$/.test(trimmed)
+  );
+}
+
+function preserveThematicBreaks(markdown: string, sourceMarkdown: string) {
+  const sourceBreaks =
+    splitMarkdownLines(sourceMarkdown).filter(isThematicBreakLine);
+  if (sourceBreaks.length === 0) return markdown;
+
+  let breakIndex = 0;
+  const lines = splitMarkdownLines(markdown).map((line) => {
+    if (!isThematicBreakLine(line)) return line;
+
+    const sourceBreak = sourceBreaks[breakIndex];
+    breakIndex += 1;
+    return sourceBreak ?? line;
+  });
+
+  return lines.join("\n");
+}
+
+function normalizeTableSignatureLine(line: string): string {
+  const trimmed = line.trim();
+  const withoutOuterPipes = trimmed
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .trim();
+  return withoutOuterPipes
+    .split("|")
+    .map((cell) => cell.trim())
+    .join("|");
+}
+
+function tableSignature(
+  headerLine: string,
+  firstBodyLine: string | undefined,
+): string {
+  return `${normalizeTableSignatureLine(headerLine)}\n${normalizeTableSignatureLine(
+    firstBodyLine ?? "",
+  )}`;
+}
+
+function collectTableDividerStyles(markdown: string) {
+  const styles = new Map<string, string[]>();
+  const lines = splitMarkdownLines(markdown);
+
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    const headerLine = lines[index] ?? "";
+    const dividerLine = lines[index + 1] ?? "";
+    if (!headerLine.includes("|") || !isMarkdownTableDivider(dividerLine)) {
+      continue;
+    }
+
+    const firstBodyLine = lines[index + 2]?.includes("|")
+      ? lines[index + 2]
+      : "";
+    const key = tableSignature(headerLine, firstBodyLine);
+    const entries = styles.get(key) ?? [];
+    entries.push(dividerLine);
+    styles.set(key, entries);
+  }
+
+  return styles;
+}
+
+function preserveTableDividers(markdown: string, sourceMarkdown: string) {
+  const sourceDividerStyles = collectTableDividerStyles(sourceMarkdown);
+  if (sourceDividerStyles.size === 0) return markdown;
+
+  const lines = splitMarkdownLines(markdown);
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    const headerLine = lines[index] ?? "";
+    const dividerLine = lines[index + 1] ?? "";
+    if (!headerLine.includes("|") || !isMarkdownTableDivider(dividerLine)) {
+      continue;
+    }
+
+    const firstBodyLine = lines[index + 2]?.includes("|")
+      ? lines[index + 2]
+      : "";
+    const key = tableSignature(headerLine, firstBodyLine);
+    const sourceDividers = sourceDividerStyles.get(key);
+    const sourceDivider = sourceDividers?.shift();
+    if (sourceDivider) {
+      lines[index + 1] = sourceDivider;
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function isBlockquoteLine(line: string): boolean {
+  return /^[ \t]{0,3}>/.test(line);
+}
+
+function blockquoteLineText(line: string): string {
+  return line.replace(/^[ \t]{0,3}>[ \t]?/, "").trim();
+}
+
+function blockquoteSignature(lines: string[]): string {
+  return lines.map(blockquoteLineText).filter(Boolean).join(" ");
+}
+
+function collectBlockquoteStyles(markdown: string) {
+  const styles = new Map<string, string[][]>();
+  const lines = splitMarkdownLines(markdown);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!isBlockquoteLine(lines[index] ?? "")) continue;
+
+    const block: string[] = [];
+    while (index < lines.length && isBlockquoteLine(lines[index] ?? "")) {
+      block.push(lines[index] ?? "");
+      index += 1;
+    }
+    index -= 1;
+
+    const key = blockquoteSignature(block);
+    if (!key) continue;
+
+    const entries = styles.get(key) ?? [];
+    entries.push(block);
+    styles.set(key, entries);
+  }
+
+  return styles;
+}
+
+function preserveBlockquoteLineBreaks(
+  markdown: string,
+  sourceMarkdown: string,
+) {
+  const sourceBlockquotes = collectBlockquoteStyles(sourceMarkdown);
+  if (sourceBlockquotes.size === 0) return markdown;
+
+  const lines = splitMarkdownLines(markdown);
+  const output: string[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!isBlockquoteLine(lines[index] ?? "")) {
+      output.push(lines[index] ?? "");
+      continue;
+    }
+
+    const block: string[] = [];
+    while (index < lines.length && isBlockquoteLine(lines[index] ?? "")) {
+      block.push(lines[index] ?? "");
+      index += 1;
+    }
+    index -= 1;
+
+    const key = blockquoteSignature(block);
+    const sourceBlocks = sourceBlockquotes.get(key);
+    const sourceBlock = sourceBlocks?.shift();
+    output.push(...(sourceBlock ?? block));
+  }
+
+  return output.join("\n");
+}
+
+export function preserveSourceMarkdownFormatting(
+  markdown: string,
+  sourceMarkdown?: string | null,
+): string {
+  if (!sourceMarkdown) return markdown;
+
+  return preserveBlockquoteLineBreaks(
+    preserveTableDividers(
+      preserveThematicBreaks(markdown, sourceMarkdown),
+      sourceMarkdown,
+    ),
+    sourceMarkdown,
+  );
 }
 
 export function toMarkdown(html: string): string {
