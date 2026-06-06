@@ -389,6 +389,85 @@
     @apply bg-transparent p-0 text-inherit;
   }
 
+  .tiptap pre code .hljs-comment,
+  .tiptap pre code .hljs-quote {
+    color: var(--rd-code-token-comment);
+    font-style: italic;
+  }
+
+  .tiptap pre code .hljs-keyword,
+  .tiptap pre code .hljs-selector-tag,
+  .tiptap pre code .hljs-literal,
+  .tiptap pre code .hljs-section,
+  .tiptap pre code .hljs-doctag {
+    color: var(--rd-code-token-keyword);
+  }
+
+  .tiptap pre code .hljs-string,
+  .tiptap pre code .hljs-attr,
+  .tiptap pre code .hljs-attribute,
+  .tiptap pre code .hljs-addition,
+  .tiptap pre code .hljs-regexp {
+    color: var(--rd-code-token-string);
+  }
+
+  .tiptap pre code .hljs-number,
+  .tiptap pre code .hljs-symbol,
+  .tiptap pre code .hljs-bullet,
+  .tiptap pre code .hljs-variable,
+  .tiptap pre code .hljs-template-variable {
+    color: var(--rd-code-token-number);
+  }
+
+  .tiptap pre code .hljs-title,
+  .tiptap pre code .hljs-name,
+  .tiptap pre code .hljs-built_in,
+  .tiptap pre code .hljs-tag {
+    color: var(--rd-code-token-function);
+  }
+
+  .tiptap pre code .hljs-type,
+  .tiptap pre code .hljs-class .hljs-title {
+    color: var(--rd-code-token-type);
+  }
+
+  .tiptap pre code .hljs-meta {
+    color: var(--rd-code-token-meta);
+  }
+
+  .tiptap pre code .hljs-emphasis {
+    font-style: italic;
+  }
+
+  .tiptap pre code .hljs-strong {
+    font-weight: 600;
+  }
+
+  .tiptap .mermaid-block {
+    @apply my-6 flex justify-center overflow-x-auto rounded-2xl border p-4;
+    background-color: var(--rd-code-block-background);
+    border-color: var(--rd-code-block-border);
+  }
+
+  .tiptap .mermaid-block svg {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .tiptap .mermaid-block .mermaid-source-fallback,
+  .tiptap .mermaid-block .mermaid-error {
+    @apply m-0 w-full whitespace-pre-wrap border-0 p-0;
+    color: var(--rd-code-block-foreground);
+  }
+
+  .tiptap .mermaid-block .mermaid-error {
+    color: #b42318;
+  }
+
+  .dark .tiptap .mermaid-block .mermaid-error {
+    color: #fca5a5;
+  }
+
   .tiptap blockquote {
     @apply border-l-4 pl-4;
     border-color: var(--rd-border-strong);
@@ -689,6 +768,13 @@
   --rd-code-block-background: #f0f5eb;
   --rd-code-block-border: #d4dece;
   --rd-code-block-foreground: #223027;
+  --rd-code-token-comment: #687264;
+  --rd-code-token-keyword: #7957a8;
+  --rd-code-token-string: #28794e;
+  --rd-code-token-number: #986801;
+  --rd-code-token-function: #2264a8;
+  --rd-code-token-type: #1f7a85;
+  --rd-code-token-meta: #7b6a45;
   --rd-terminal-background: #26323a;
   --rd-terminal-foreground: #e7f0eb;
   --rd-terminal-muted: #a9b7b0;
@@ -770,6 +856,13 @@
   --rd-code-block-background: #edf3f7;
   --rd-code-block-border: #cbd8e2;
   --rd-code-block-foreground: #1f2d37;
+  --rd-code-token-comment: #637180;
+  --rd-code-token-keyword: #6e59a7;
+  --rd-code-token-string: #2f7d52;
+  --rd-code-token-number: #9a6415;
+  --rd-code-token-function: #2868a8;
+  --rd-code-token-type: #1f7a85;
+  --rd-code-token-meta: #736844;
   --rd-terminal-background: #26323a;
   --rd-terminal-foreground: #e7f0eb;
   --rd-terminal-muted: #a9b7b0;
@@ -816,6 +909,13 @@
   --rd-code-block-background: #222c28;
   --rd-code-block-border: #46564d;
   --rd-code-block-foreground: #e3ebe2;
+  --rd-code-token-comment: #9aa89e;
+  --rd-code-token-keyword: #d2b3ff;
+  --rd-code-token-string: #9fdbb7;
+  --rd-code-token-number: #e7ca8f;
+  --rd-code-token-function: #9ccaf3;
+  --rd-code-token-type: #8fd4d5;
+  --rd-code-token-meta: #c9bd92;
   --rd-terminal-background: #26323a;
   --rd-terminal-foreground: #e7f0eb;
   --rd-terminal-muted: #a9b7b0;
@@ -896,6 +996,13 @@
   --rd-code-block-background: #222a31;
   --rd-code-block-border: #48545f;
   --rd-code-block-foreground: #e6edf3;
+  --rd-code-token-comment: #9aa8b5;
+  --rd-code-token-keyword: #c8b3ff;
+  --rd-code-token-string: #9fddb4;
+  --rd-code-token-number: #e9c987;
+  --rd-code-token-function: #9bcdfb;
+  --rd-code-token-type: #8bd7dc;
+  --rd-code-token-meta: #cec196;
   --rd-terminal-background: #20272d;
   --rd-terminal-foreground: #e7eef5;
   --rd-terminal-muted: #a9b6c2;

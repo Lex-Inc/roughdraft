@@ -24,6 +24,10 @@ describe("createApp", () => {
     fs.rmSync(homeDir, { recursive: true, force: true });
   });
 
+  function delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   it("creates a markdown page on disk", async () => {
     const { app } = createApp({
       homeDir,
@@ -438,6 +442,63 @@ describe("createApp", () => {
         },
       ],
     });
+  });
+
+  it("flushes review watch response headers while waiting for completion", async () => {
+    fs.writeFileSync(path.join(projectDir, "draft.md"), "# Draft\n");
+    const { app } = createApp({
+      homeDir,
+      staticDirPath: projectDir,
+    });
+    const server = app.listen(0);
+    const port = (server.address() as AddressInfo).port;
+    const controller = new AbortController();
+    const responsePromise = fetch(
+      `http://127.0.0.1:${port}/api/review-events/watch`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectPath: projectDir,
+          path: "draft.md",
+          batchWindowSeconds: 0,
+        }),
+        signal: controller.signal,
+      },
+    );
+    responsePromise.catch(() => {});
+
+    try {
+      await expect(
+        Promise.race([
+          responsePromise.then(() => true),
+          delay(50).then(() => false),
+        ]),
+      ).resolves.toBe(true);
+
+      await fetch(`http://127.0.0.1:${port}/api/review-events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectPath: projectDir, path: "draft.md" }),
+      });
+
+      await expect(
+        responsePromise.then((response) => response.json()),
+      ).resolves.toMatchObject({
+        timedOut: false,
+        events: [
+          {
+            type: "review.completed",
+            documentPath: path.join(projectDir, "draft.md"),
+          },
+        ],
+      });
+    } finally {
+      controller.abort();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
   });
 
   it("reports active review watchers for a markdown file", async () => {

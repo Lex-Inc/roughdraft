@@ -95,6 +95,7 @@ This repo installs a worktree-specific Roughdraft CLI wrapper during setup.
 
 - `roughdraft` is the published npm package
 - `roughdraft-dev-<worktree-name>` is the local CLI for one specific checkout
+- In this checkout, plain `roughdraft` should resolve to the local shim at `~/.local/bin/roughdraft`, which points to `~/.local/bin/roughdraft-dev-roughdraft-markdown`. Prefer that local shim over the published/global install.
 
 In a fresh worktree, `pnpm setup` runs `pnpm dev:install-cli`, which creates a wrapper in `~/.local/bin` by default.
 
@@ -109,10 +110,10 @@ roughdraft_cmd="roughdraft-dev-$worktree_name"
 Example in this checkout:
 
 ```bash
-roughdraft-dev-shanghai-v4 start
+roughdraft-dev-roughdraft-markdown start
 ```
 
-Do not use the global `roughdraft` command for repo-local development in this repo unless the user explicitly asks for the published package.
+Do not use the global published `roughdraft` command for repo-local development in this repo unless the user explicitly asks for the published package. If `command -v roughdraft` does not resolve to `~/.local/bin/roughdraft`, use `roughdraft-dev-roughdraft-markdown` directly.
 
 ## Fallback If The Wrapper Is Missing
 

@@ -1,6 +1,6 @@
-import { Extension, Mark, Node, mergeAttributes } from "@tiptap/core";
+import { Extension, Mark, mergeAttributes, Node } from "@tiptap/core";
 import Code from "@tiptap/extension-code";
-import CodeBlock from "@tiptap/extension-code-block";
+import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -17,7 +17,9 @@ import type {
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
-import { rawMarkdownBlockAttribute } from "./markdown";
+import { common, createLowlight } from "lowlight";
+import { mermaidBlockAttribute, rawMarkdownBlockAttribute } from "./markdown";
+import { renderMermaidInto } from "./render-mermaid";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -713,9 +715,12 @@ const MarkdownCode = Code.extend({
   excludes: "bold italic strike link",
 });
 
-const MarkdownCodeBlock = CodeBlock.extend({
+// Tokenize common fenced code block languages for theme-aware highlighting.
+const lowlight = createLowlight(common);
+
+const MarkdownCodeBlock = CodeBlockLowlight.extend({
   marks: "commentRef criticChange",
-});
+}).configure({ lowlight });
 
 const MarkdownImage = Image.extend({
   addAttributes() {
@@ -767,6 +772,65 @@ const RawMarkdownBlock = Node.create({
   },
 });
 
+const MermaidBlock = Node.create({
+  name: "mermaidBlock",
+  group: "block",
+  atom: true,
+  selectable: true,
+
+  addAttributes() {
+    return {
+      source: {
+        default: "",
+        parseHTML: (element) => {
+          const raw = element.getAttribute(mermaidBlockAttribute) ?? "";
+          try {
+            return decodeURIComponent(raw);
+          } catch {
+            return raw;
+          }
+        },
+        renderHTML: (attributes) => ({
+          [mermaidBlockAttribute]: encodeURIComponent(
+            (attributes.source as string) ?? "",
+          ),
+        }),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: `div[${mermaidBlockAttribute}]`, priority: 1000 }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["div", mergeAttributes(HTMLAttributes)];
+  },
+
+  addNodeView() {
+    return ({ node }) => {
+      const dom = document.createElement("div");
+      dom.className = "mermaid-block";
+      dom.contentEditable = "false";
+
+      void renderMermaidInto(dom, (node.attrs.source as string) ?? "");
+
+      return {
+        dom,
+        ignoreMutation: () => true,
+        update: (updatedNode: ProseMirrorNode) => {
+          if (updatedNode.type.name !== "mermaidBlock") return false;
+          void renderMermaidInto(
+            dom,
+            (updatedNode.attrs.source as string) ?? "",
+          );
+          return true;
+        },
+      };
+    };
+  },
+});
+
 export function createEditorExtensions(placeholder: string) {
   return [
     StarterKit.configure({
@@ -799,6 +863,7 @@ export function createEditorExtensions(placeholder: string) {
     CommentRef,
     CriticChange,
     RawMarkdownBlock,
+    MermaidBlock,
     MarkdownCodeBlock,
     CommentHighlight,
     CriticChangeHighlight,

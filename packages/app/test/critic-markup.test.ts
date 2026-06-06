@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
 import { Editor } from "@tiptap/core";
+import { describe, expect, it } from "vitest";
 import {
   createCriticChange,
   createNextChangeId,
@@ -65,7 +65,9 @@ describe("CriticMarkup comments", () => {
           "<details>",
           "<summary>Literal examples</summary>",
           "",
-          '{==example==}{>>literal HTML comment example<<}{id="c60" by="AI" at="2026-05-24T18:50:00.000Z"}',
+          "{==example==}{>>First paragraph.",
+          "",
+          'Second paragraph.<<}{id="c61" by="AI" at="2026-05-24T18:50:00.000Z"}',
           "",
           "</details>",
           "",
@@ -95,6 +97,35 @@ describe("CriticMarkup comments", () => {
       authorType: "ai",
     });
     expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+  });
+
+  it("does not render raw legacy metadata when inline comment bodies contain blank lines", () => {
+    const input = [
+      "This is {==text==}{>>First paragraph.",
+      "",
+      '- Second paragraph.<<}{id="c1" by="user" at="2026-04-28T12:00:00.000Z"} text.',
+      "",
+    ].join("\n");
+
+    const { html, comments } = criticMarkdownToRenderedHtml(input);
+    const renderedText =
+      new DOMParser().parseFromString(html, "text/html").body.textContent ?? "";
+
+    expect(renderedText).not.toContain('<<}{id="c1"');
+    expect(comments.get("c1")).toMatchObject({
+      id: "c1",
+      content: "First paragraph.\n\n- Second paragraph.",
+      authorType: "user",
+    });
+
+    const parsed = criticMarkdownToEditorState(input);
+    const output = editorStateToCriticMarkdown(parsed.doc, parsed.comments);
+
+    expect(output).toContain("{==text==}{>><<}{#c1}");
+    expect(output).toContain("body: |");
+    expect(output).toContain("First paragraph.");
+    expect(output).toContain("- Second paragraph.");
+    expect(output).not.toContain('<<}{id="c1"');
   });
 
   it("renders YAML endmatter-backed root comments and replies", () => {
@@ -183,6 +214,32 @@ describe("CriticMarkup comments", () => {
     expect(comments.size).toBe(0);
     expect(output).toContain("comments:");
     expect(output).toContain("not review metadata");
+  });
+
+  it("preserves README-style final YAML review metadata without body anchors", () => {
+    const input = [
+      "# Roughdraft Endmatter Test",
+      "",
+      "Plain prose. No body markup.",
+      "",
+      "---",
+      "comments:",
+      "  c1:",
+      "    by: user",
+      '    at: "2026-04-28T12:00:00.000Z"',
+      "",
+    ].join("\n");
+
+    const { doc, comments, endmatter } = criticMarkdownToEditorState(input);
+    const output = editorStateToCriticMarkdown(doc, comments);
+
+    expect(endmatter).toContain("comments:");
+    expect(comments.size).toBe(0);
+    expect(output).toContain("---\ncomments:");
+    expect(output).toContain("c1:");
+    expect(output).toContain("2026-04-28T12:00:00.000Z");
+    expect(output).not.toContain("* * *");
+    expect(output).not.toContain("comments: c1:");
   });
 
   it("writes YAML metadata for new suggestions in endmatter-backed documents", () => {
@@ -1071,6 +1128,22 @@ function richTextRoundTrip(markdown: string): string {
   return editorStateToCriticMarkdown(doc, comments, { frontmatter });
 }
 
+function collectNodeTypes(node: { type?: string; content?: unknown[] }) {
+  const types: string[] = [];
+
+  if (node.type) {
+    types.push(node.type);
+  }
+
+  for (const child of node.content ?? []) {
+    if (child && typeof child === "object") {
+      types.push(...collectNodeTypes(child));
+    }
+  }
+
+  return types;
+}
+
 describe("Markdown rich-text round-trip regressions", () => {
   it("preserves GFM strikethrough markup", () => {
     const input = "Keep ~~removed~~ and **bold** text.\n";
@@ -1145,6 +1218,18 @@ describe("Markdown rich-text round-trip regressions", () => {
       "",
     ].join("\n");
 
+    expect(richTextRoundTrip(input)).toBe(input);
+  });
+
+  it("renders table rows with multiple inline code cells as editable tables", () => {
+    const input = ["| key | val |", "| --- | --- |", "| `a` | `1` |", ""].join(
+      "\n",
+    );
+    const { doc } = criticMarkdownToEditorState(input);
+    const nodeTypes = collectNodeTypes(doc);
+
+    expect(nodeTypes).toContain("table");
+    expect(nodeTypes).not.toContain("rawMarkdownBlock");
     expect(richTextRoundTrip(input)).toBe(input);
   });
 });

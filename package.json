@@ -41,7 +41,8 @@
   ],
   "dependencies": {
     "@roughdraft/rfm": "file:packages/rfm",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.12",

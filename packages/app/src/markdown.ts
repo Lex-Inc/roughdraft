@@ -4,6 +4,7 @@ import TurndownService from "turndown";
 import { parse as parseYaml } from "yaml";
 
 export const rawMarkdownBlockAttribute = "data-markdown-raw-block";
+export const mermaidBlockAttribute = "data-mermaid-source";
 
 export interface MarkdownOptions {
   resolveFileUrl?: (path: string) => string | null;
@@ -55,6 +56,28 @@ function createRawMarkdownBlock(markdown: string): string {
   )}"></div>\n`;
 }
 
+function encodeMermaidSource(source: string): string {
+  return encodeURIComponent(source);
+}
+
+function decodeMermaidSource(encoded: string): string {
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return encoded;
+  }
+}
+
+export function createMermaidBlock(source: string): string {
+  return `<div ${mermaidBlockAttribute}="${escapeHtml(
+    encodeMermaidSource(source),
+  )}"></div>\n`;
+}
+
+function mermaidFenceFromEncoded(encoded: string): string {
+  return `\n\n\`\`\`mermaid\n${decodeMermaidSource(encoded).trim()}\n\`\`\`\n\n`;
+}
+
 function protectRawHtmlBlocks(markdown: string): string {
   return markdown
     .replace(
@@ -74,7 +97,31 @@ function protectIndentedCodeAfterLists(markdown: string): string {
 }
 
 function codeSpanContainsPipe(value: string): boolean {
-  return /`[^`\n]*\|[^`\n]*`/.test(value);
+  let cursor = 0;
+
+  while (cursor < value.length) {
+    const openingStart = value.indexOf("`", cursor);
+    if (openingStart === -1) return false;
+
+    let openingEnd = openingStart + 1;
+    while (value[openingEnd] === "`") {
+      openingEnd += 1;
+    }
+
+    const delimiter = value.slice(openingStart, openingEnd);
+    const closingStart = value.indexOf(delimiter, openingEnd);
+    if (closingStart === -1) {
+      return false;
+    }
+
+    if (value.slice(openingEnd, closingStart).includes("|")) {
+      return true;
+    }
+
+    cursor = closingStart + delimiter.length;
+  }
+
+  return false;
 }
 
 function protectPipeSensitiveTables(markdown: string): string {
@@ -195,6 +242,25 @@ function hasDocumentLevelComment(value: unknown): boolean {
   );
 }
 
+function hasReviewMetadataEntry(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+
+  const entry = value as Record<string, unknown>;
+  return (
+    typeof entry.by === "string" &&
+    typeof entry.at === "string" &&
+    !Number.isNaN(Date.parse(entry.at))
+  );
+}
+
+function hasReviewMetadataMap(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+
+  return Object.values(value as Record<string, unknown>).some(
+    hasReviewMetadataEntry,
+  );
+}
+
 function isRoughdraftReviewEndmatter(endmatter: string): boolean {
   const yamlText = endmatter.replace(/^---[ \t]*(?:\r\n|\n)/, "");
   let parsed: unknown;
@@ -286,7 +352,11 @@ export function splitYamlDocumentMetadata(
   if (!precedingBody.includes("{#")) {
     const yamlText = candidate.replace(/^---[ \t]*(?:\r\n|\n)/, "");
     const parsed = parseYaml(yamlText) as Record<string, unknown> | null;
-    if (!hasDocumentLevelComment(parsed?.comments)) {
+    if (
+      !hasDocumentLevelComment(parsed?.comments) &&
+      !hasReviewMetadataMap(parsed?.comments) &&
+      !hasReviewMetadataMap(parsed?.suggestions)
+    ) {
       return { frontmatter, body, endmatter: null };
     }
   }
@@ -315,6 +385,11 @@ export function createMarkedRenderer(options?: MarkdownOptions) {
 
   renderer.code = ({ text, lang, escaped }) => {
     const language = (lang || "").match(/\S+/)?.[0];
+
+    if (language === "mermaid") {
+      return createMermaidBlock(text);
+    }
+
     const content = escaped ? text : escapeHtml(text);
     const classAttr = language
       ? ` class="language-${escapeHtml(language)}"`
@@ -388,6 +463,14 @@ export function createTurndownService(): TurndownService {
         ).trimEnd()}\n\n`;
       }
 
+      // Empty divs are routed here by Turndown before custom rules, so the
+      // Mermaid round-trip must be handled in blankReplacement too.
+      if (node.hasAttribute(mermaidBlockAttribute)) {
+        return mermaidFenceFromEncoded(
+          node.getAttribute(mermaidBlockAttribute) ?? "",
+        );
+      }
+
       return (node as HTMLElement & { isBlock?: boolean }).isBlock
         ? "\n\n"
         : "";
@@ -400,6 +483,22 @@ export function createTurndownService(): TurndownService {
   service.addRule("compactListItem", {
     filter: "li",
     replacement(content, node, options) {
+      const element = node as HTMLElement;
+      if (element.getAttribute("data-type") === "taskItem") {
+        const checked = element.getAttribute("data-checked") === "true";
+        const body = content
+          .replace(/^\s*\[[ xX]\]\s*/, "")
+          .trim()
+          .replace(/\n[ \t]*\n/g, "\n")
+          .replace(/\n/gm, "\n  ");
+        const marker = checked ? "[x]" : "[ ]";
+        const taskItem = body ? `${marker} ${body}` : marker;
+
+        return `${options.bulletListMarker} ${taskItem}${
+          node.nextSibling ? "\n" : ""
+        }`;
+      }
+
       const trimmed = content
         .replace(/^\n+/, "")
         .replace(/\n+$/, "\n")
@@ -521,6 +620,17 @@ export function createTurndownService(): TurndownService {
       const encoded =
         (node as HTMLElement).getAttribute(rawMarkdownBlockAttribute) ?? "";
       return `\n\n${decodeRawMarkdownBlock(encoded).trimEnd()}\n\n`;
+    },
+  });
+
+  service.addRule("mermaidBlock", {
+    filter: (node) =>
+      node.nodeType === 1 &&
+      (node as HTMLElement).hasAttribute(mermaidBlockAttribute),
+    replacement(_content, node) {
+      const encoded =
+        (node as HTMLElement).getAttribute(mermaidBlockAttribute) ?? "";
+      return mermaidFenceFromEncoded(encoded);
     },
   });
 

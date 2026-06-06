@@ -169,6 +169,161 @@ test.describe("markdown round-trips", () => {
     });
   });
 
+  test("rich-text save keeps task-list checkboxes on single lines", async ({
+    page,
+  }) => {
+    const initial = [
+      "# Task List",
+      "",
+      "Intro.",
+      "",
+      "- [ ] Claude reviewed",
+      "- [x] Codex reviewed",
+      "",
+    ].join("\n");
+    const filePath = writeProjectFile(projectDir, "task-list.md", initial);
+
+    await openMarkdownFile(page, filePath, "rich-text");
+    const editor = richTextEditor(page);
+    await expect(editor).toContainText("Claude reviewed");
+    await editor.click();
+    await page.keyboard.press(
+      process.platform === "darwin" ? "Meta+End" : "Control+End",
+    );
+    await page.keyboard.type("Saved.");
+    await page.keyboard.press(
+      process.platform === "darwin" ? "Meta+S" : "Control+S",
+    );
+
+    await expect
+      .poll(() => readProjectFile(projectDir, "task-list.md"))
+      .toContain("Saved.");
+    const saved = readProjectFile(projectDir, "task-list.md");
+    expect(saved).toContain("- [ ] Claude reviewed");
+    expect(saved).toContain("- [x] Codex reviewed");
+    expect(saved).not.toContain("- [ ] \n");
+    expect(saved).not.toContain("- [x] \n");
+
+    logE2eEvent("markdown-roundtrip.task-list-save", {
+      file: "task-list.md",
+      size: fs.statSync(filePath).size,
+    });
+  });
+
+  test("rich-text save preserves final YAML review metadata", async ({
+    page,
+  }) => {
+    const initial = [
+      "# Roughdraft Endmatter Test",
+      "",
+      "Plain prose. No body markup.",
+      "",
+      "---",
+      "comments:",
+      "  c1:",
+      "    by: user",
+      '    at: "2026-04-28T12:00:00.000Z"',
+      "",
+    ].join("\n");
+    const filePath = writeProjectFile(projectDir, "yaml-endmatter.md", initial);
+
+    await openMarkdownFile(page, filePath, "rich-text");
+    const editor = richTextEditor(page);
+    await expect(editor).toContainText("Plain prose");
+    await expect(editor).not.toContainText("comments:");
+    await editor.click();
+    await page.keyboard.press(
+      process.platform === "darwin" ? "Meta+End" : "Control+End",
+    );
+    await page.keyboard.type(" Edited.");
+    await page.keyboard.press(
+      process.platform === "darwin" ? "Meta+S" : "Control+S",
+    );
+
+    await expect
+      .poll(() => readProjectFile(projectDir, "yaml-endmatter.md"))
+      .toContain("Edited.");
+    const saved = readProjectFile(projectDir, "yaml-endmatter.md");
+    expect(saved).toContain("---\ncomments:");
+    expect(saved).toContain("c1:");
+    expect(saved).toContain("2026-04-28T12:00:00.000Z");
+    expect(saved).not.toContain("* * *");
+    expect(saved).not.toContain("comments: c1:");
+
+    logE2eEvent("markdown-roundtrip.yaml-endmatter-save", {
+      file: "yaml-endmatter.md",
+      size: fs.statSync(filePath).size,
+    });
+  });
+
+  test("rich-text renders table rows with multiple inline code cells", async ({
+    page,
+  }) => {
+    const initial = [
+      "# Inline Code Table",
+      "",
+      "| key | val |",
+      "| --- | --- |",
+      "| `a` | `1` |",
+      "",
+    ].join("\n");
+    const filePath = writeProjectFile(
+      projectDir,
+      "inline-code-table.md",
+      initial,
+    );
+
+    await openMarkdownFile(page, filePath, "rich-text");
+    const editor = richTextEditor(page);
+    const tableState = await editor.evaluate((element) => {
+      const tables = Array.from(element.getElementsByTagName("table"));
+      const table = tables[0];
+      const rect = table?.getBoundingClientRect();
+      const inlineCodeTexts = Array.from(
+        table?.getElementsByTagName("td") ?? [],
+      ).flatMap((cell) =>
+        Array.from(cell.getElementsByTagName("code")).map(
+          (code) => code.textContent ?? "",
+        ),
+      );
+      const rawBlockCount = Array.from(
+        element.getElementsByTagName("*"),
+      ).filter((node) => node.hasAttribute("data-markdown-raw-block")).length;
+
+      return {
+        tableCount: tables.length,
+        tableVisible: Boolean(rect && rect.width > 0 && rect.height > 0),
+        inlineCodeTexts,
+        rawBlockCount,
+      };
+    });
+
+    expect(tableState).toEqual({
+      tableCount: 1,
+      tableVisible: true,
+      inlineCodeTexts: ["a", "1"],
+      rawBlockCount: 0,
+    });
+
+    await editor.click();
+    await page.keyboard.press(
+      process.platform === "darwin" ? "Meta+S" : "Control+S",
+    );
+
+    await expect(documentSaveStatus(page)).toHaveAttribute(
+      "aria-label",
+      "Saved",
+    );
+    expect(readProjectFile(projectDir, "inline-code-table.md")).toContain(
+      "| `a` | `1` |",
+    );
+
+    logE2eEvent("markdown-roundtrip.inline-code-table-rendered", {
+      file: "inline-code-table.md",
+      size: fs.statSync(filePath).size,
+    });
+  });
+
   test("save shortcut prevents browser default in rich-text and code modes", async ({
     page,
   }) => {

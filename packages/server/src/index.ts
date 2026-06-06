@@ -109,6 +109,7 @@ interface RemoteDocumentSavePayload {
 const REMOTE_SESSION_TTL_MS = 5 * 60 * 1000;
 const REMOTE_SESSION_SWEEP_INTERVAL_MS = 60 * 1000;
 const REMOTE_SESSION_KEEPALIVE_MS = 15 * 1000;
+const REVIEW_WATCH_KEEPALIVE_MS = 15 * 1000;
 const MAX_OVERALL_COMMENT_LENGTH = 4_000;
 
 let nextOpenRequestClientId = 1;
@@ -691,15 +692,30 @@ export function createApp(options: CreateAppOptions = {}): CreateAppResult {
     const afterSequence =
       typeof req.body?.afterSequence === "number" ? req.body.afterSequence : 0;
 
-    const result = await reviewEvents.wait({
-      documentPath: target.absolutePath,
-      afterSequence: fromNow ? reviewEvents.latestSequence() : afterSequence,
-      timeoutMs:
-        timeoutSeconds !== undefined ? timeoutSeconds * 1000 : undefined,
-      batchWindowMs: batchWindowSeconds * 1000,
-    });
+    res.status(200);
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.flushHeaders();
 
-    res.json(result);
+    const heartbeat = setInterval(() => {
+      if (!res.destroyed && !res.writableEnded) {
+        res.write(" ");
+      }
+    }, REVIEW_WATCH_KEEPALIVE_MS);
+    heartbeat.unref?.();
+
+    try {
+      const result = await reviewEvents.wait({
+        documentPath: target.absolutePath,
+        afterSequence: fromNow ? reviewEvents.latestSequence() : afterSequence,
+        timeoutMs:
+          timeoutSeconds !== undefined ? timeoutSeconds * 1000 : undefined,
+        batchWindowMs: batchWindowSeconds * 1000,
+      });
+
+      res.end(`${JSON.stringify(result)}\n`);
+    } finally {
+      clearInterval(heartbeat);
+    }
   });
 
   app.get("/api/review-events/status", (req, res) => {
