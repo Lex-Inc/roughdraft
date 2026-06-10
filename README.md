@@ -349,4 +349,4 @@ MIT
 
 * * *
 
-Built by [Nathan Baschez](https://twitter.com/nbashaw)
+Built by [Nathan Baschez](https://x.com/nbaschez)
