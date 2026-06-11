@@ -11,6 +11,7 @@ import {
   ensureServerRunning,
   getServerStateFilePath,
   runCli,
+  WATCH_POLL_REISSUE_SECONDS,
 } from "./cli";
 import { createApp } from "./index";
 import { ROUGHDRAFT_DEFAULT_PORT } from "./network";
@@ -730,22 +731,19 @@ describe("cli", () => {
           );
         }
 
-        if (url.pathname === "/api/review-events/watch") {
-          watchUrl = url.toString();
-          return new Response(
-            JSON.stringify({
-              events: [{ documentPath, type: "review.completed" }],
-              timedOut: false,
-              nextSequence: 2,
-            }),
-            {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            },
-          );
-        }
-
         throw new Error(`Unexpected request: ${url.toString()}`);
+      },
+      pollReviewEvents: async (url) => {
+        watchUrl = url.toString();
+        return {
+          ok: true,
+          status: 200,
+          payload: {
+            events: [{ documentPath, type: "review.completed" }],
+            timedOut: false,
+            nextSequence: 2,
+          },
+        };
       },
       spawnServerProcess: async () => {
         spawnCount += 1;
@@ -1029,27 +1027,14 @@ describe("cli", () => {
       timeoutSeconds?: number;
       batchWindowSeconds?: number;
     } | null = null;
+    const realPoll = test.deps.pollReviewEvents;
+    const captureWatchBody: typeof realPoll = (url, body, options) => {
+      watchRequestBody = body;
+      return realPoll(url, body, options);
+    };
     const deps = {
       ...test.deps,
-      fetchImpl: async (input: Parameters<typeof fetch>[0], init) => {
-        const url =
-          input instanceof URL
-            ? input
-            : new URL(
-                typeof input === "string" ? input : input.url,
-                "http://localhost",
-              );
-        if (
-          url.pathname === "/api/review-events/watch" &&
-          typeof init?.body === "string"
-        ) {
-          watchRequestBody = JSON.parse(init.body) as {
-            timeoutSeconds?: number;
-            batchWindowSeconds?: number;
-          };
-        }
-        return test.deps.fetchImpl(input, init);
-      },
+      pollReviewEvents: captureWatchBody,
     };
 
     const watchPromise = runCli(
@@ -1076,8 +1061,8 @@ describe("cli", () => {
     }
     expect(watchRequestBody).toMatchObject({
       batchWindowSeconds: 0,
+      timeoutSeconds: WATCH_POLL_REISSUE_SECONDS,
     });
-    expect(watchRequestBody).not.toHaveProperty("timeoutSeconds");
     await fetch(`http://localhost:${persisted?.port}/api/review-events`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1101,6 +1086,52 @@ describe("cli", () => {
         },
       ],
     });
+  });
+
+  it("re-issues the watch poll when a bounded poll returns before a review event", async () => {
+    const test = createTestDependencies();
+    const documentPath = path.join(projectDir, "draft.md");
+    fs.writeFileSync(documentPath, "# Draft\n");
+
+    let pollCount = 0;
+    const deps = {
+      ...test.deps,
+      pollReviewEvents: async () => {
+        pollCount += 1;
+        // The server bounds each poll and returns before the user clicks "Done
+        // Reviewing"; the CLI must re-issue rather than treat it as a timeout.
+        if (pollCount === 1) {
+          return {
+            ok: true,
+            status: 200,
+            payload: { timedOut: true, nextSequence: 1 },
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          payload: {
+            events: [{ documentPath, type: "review.completed" }],
+            timedOut: false,
+            nextSequence: 2,
+          },
+        };
+      },
+    };
+
+    const exitCode = await runCli(
+      ["watch", documentPath, "--json", "--batch-window", "0"],
+      deps,
+    );
+    const payload = parseOnlyJsonLog<{
+      timedOut: boolean;
+      events: Array<{ documentPath: string; type: string }>;
+    }>(test.logs);
+
+    expect(exitCode).toBe(0);
+    expect(pollCount).toBe(2);
+    expect(payload.timedOut).toBe(false);
+    expect(payload.events).toHaveLength(1);
   });
 
   it("cleans stale state during status checks", async () => {

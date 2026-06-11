@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -28,6 +29,14 @@ const SERVER_WAIT_ATTEMPTS = 40;
 const SERVER_WAIT_DELAY_MS = 150;
 const PROCESS_WAIT_ATTEMPTS = 20;
 const PROCESS_WAIT_DELAY_MS = 150;
+// Per-poll bound the CLI requests when waiting indefinitely for "Done
+// Reviewing". The server clamps each watch to its own maximum, so this is large
+// enough that re-issues are rare; node:http imposes no client-side headers
+// timeout, so the loop re-polls cleanly until a real event arrives.
+export const WATCH_POLL_REISSUE_SECONDS = 1800;
+// Client-side safety bound added on top of an explicit --timeout so the command
+// cannot hang if the server never responds.
+const WATCH_EXPLICIT_TIMEOUT_GRACE_SECONDS = 5;
 const USAGE_ERROR = 2;
 const KNOWN_COMMANDS = [
   "open",
@@ -75,10 +84,35 @@ export interface SpawnedServer {
   pid: number;
 }
 
+interface ReviewWatchRequestBody {
+  projectPath: string;
+  path: string;
+  batchWindowSeconds: number;
+  fromNow: boolean;
+  timeoutSeconds?: number;
+}
+
+interface ReviewWatchPayload {
+  events?: unknown[];
+  timedOut?: boolean;
+  nextSequence?: number;
+}
+
+interface ReviewWatchResult {
+  ok: boolean;
+  status: number;
+  payload: ReviewWatchPayload;
+}
+
 export interface CliDependencies {
   env: NodeJS.ProcessEnv;
   cwd: string;
   fetchImpl: typeof fetch;
+  pollReviewEvents: (
+    url: URL,
+    body: ReviewWatchRequestBody,
+    options?: { timeoutMs?: number },
+  ) => Promise<ReviewWatchResult>;
   findAvailablePortImpl: typeof findAvailablePort;
   sleepImpl: (ms: number) => Promise<void>;
   spawnServerProcess: (options: {
@@ -803,6 +837,60 @@ function defaultSpawnServerProcess(options: {
   return { pid: child.pid };
 }
 
+// Long-poll the review-events watch endpoint over node:http instead of undici's
+// global fetch. The server holds the request open until a review.completed event
+// arrives or its own bound elapses; undici enforces a ~300s headers timeout that
+// fires mid-poll (UND_ERR_HEADERS_TIMEOUT) before the user clicks "Done
+// Reviewing", whereas node:http imposes no client-side headers timeout.
+function defaultPollReviewEvents(
+  url: URL,
+  body: ReviewWatchRequestBody,
+  options: { timeoutMs?: number } = {},
+): Promise<ReviewWatchResult> {
+  return new Promise((resolve, reject) => {
+    const data = Buffer.from(JSON.stringify(body), "utf8");
+    const request = http.request(
+      {
+        hostname: url.hostname,
+        port: url.port,
+        path: url.pathname + url.search,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": data.length,
+        },
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk: Buffer) => chunks.push(chunk));
+        response.on("end", () => {
+          const status = response.statusCode ?? 0;
+          const text = Buffer.concat(chunks).toString("utf8");
+          let payload: ReviewWatchPayload;
+          try {
+            payload = text ? (JSON.parse(text) as ReviewWatchPayload) : {};
+          } catch {
+            reject(
+              new Error(`Unexpected watch response: ${text.slice(0, 200)}`),
+            );
+            return;
+          }
+          resolve({ ok: status >= 200 && status < 300, status, payload });
+        });
+      },
+    );
+    request.on("error", reject);
+    // Only the explicit --timeout path arms a client-side bound; the indefinite
+    // poll relies on the server's own bound and re-issues.
+    if (options.timeoutMs !== undefined) {
+      request.setTimeout(options.timeoutMs, () => {
+        request.destroy(new Error("Watch request timed out"));
+      });
+    }
+    request.end(data);
+  });
+}
+
 export function createCliDependencies(
   overrides: Partial<CliDependencies> = {},
 ): CliDependencies {
@@ -812,6 +900,7 @@ export function createCliDependencies(
     env: overrides.env ?? process.env,
     cwd: overrides.cwd ?? process.cwd(),
     fetchImpl,
+    pollReviewEvents: overrides.pollReviewEvents ?? defaultPollReviewEvents,
     findAvailablePortImpl: overrides.findAvailablePortImpl ?? findAvailablePort,
     sleepImpl: overrides.sleepImpl ?? ((ms) => sleep(ms)),
     spawnServerProcess:
@@ -2117,55 +2206,66 @@ async function runWatch(
     serverUrl = result.server.url;
   }
   const relativePath = path.relative(target.projectDir, target.openPath);
-  const body: {
-    projectPath: string;
-    path: string;
-    timeoutSeconds?: number;
-    batchWindowSeconds: number;
-    fromNow: boolean;
-  } = {
+  const watchUrl = new URL("/api/review-events/watch", serverUrl);
+  const baseBody: ReviewWatchRequestBody = {
     projectPath: target.projectDir,
     path: relativePath,
     batchWindowSeconds: options.batchWindowSeconds,
     fromNow: !options.replay,
   };
+
+  // Explicit --timeout: a single bounded poll, surfacing a timeout as a
+  // non-zero exit. The client-side bound is a safety net on top of the server's.
   if (options.timeoutSeconds !== undefined) {
-    body.timeoutSeconds = options.timeoutSeconds;
+    const { ok, status, payload } = await deps.pollReviewEvents(
+      watchUrl,
+      { ...baseBody, timeoutSeconds: options.timeoutSeconds },
+      {
+        timeoutMs:
+          (options.timeoutSeconds + WATCH_EXPLICIT_TIMEOUT_GRACE_SECONDS) *
+          1000,
+      },
+    );
+    if (!ok) {
+      throw new Error(`Failed to watch review events: ${status}`);
+    }
+    return reportWatchPayload(deps, target.openPath, payload, json);
   }
 
-  const response = await deps.fetchImpl(
-    new URL("/api/review-events/watch", serverUrl),
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      ...(options.timeoutSeconds !== undefined
-        ? { signal: AbortSignal.timeout((options.timeoutSeconds + 5) * 1000) }
-        : {}),
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(`Failed to watch review events: ${response.status}`);
+  // No --timeout: wait until "Done Reviewing". Each poll is bounded server-side,
+  // so re-issue cleanly whenever the server returns before a real event.
+  for (;;) {
+    const { ok, status, payload } = await deps.pollReviewEvents(watchUrl, {
+      ...baseBody,
+      timeoutSeconds: WATCH_POLL_REISSUE_SECONDS,
+    });
+    if (!ok) {
+      throw new Error(`Failed to watch review events: ${status}`);
+    }
+    if (payload.timedOut) {
+      continue;
+    }
+    return reportWatchPayload(deps, target.openPath, payload, json);
   }
+}
 
-  const payload = (await response.json()) as {
-    events?: unknown[];
-    timedOut?: boolean;
-    nextSequence?: number;
-  };
-
+function reportWatchPayload(
+  deps: CliDependencies,
+  openPath: string,
+  payload: ReviewWatchPayload,
+  json: boolean,
+): number {
   if (json) {
     emitJson(deps.log, payload);
     return payload.timedOut ? 1 : 0;
   }
 
   if (payload.timedOut) {
-    deps.log(`No review completed event received for ${target.openPath}.`);
+    deps.log(`No review completed event received for ${openPath}.`);
     return 1;
   }
 
-  deps.log(`Review completed for ${target.openPath}.`);
+  deps.log(`Review completed for ${openPath}.`);
   deps.log(`Received ${(payload.events ?? []).length} event(s).`);
   return 0;
 }
