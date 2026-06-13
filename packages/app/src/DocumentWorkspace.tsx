@@ -43,6 +43,7 @@ import {
   PageCard,
 } from "./PageCard";
 import type { CompleteReviewOptions, Page, StorageBackend } from "./storage";
+import { useReviewLayoutShiftAnimation } from "./useReviewLayoutShiftAnimation";
 
 type DiskChangeState = "clean" | "changed" | "conflict" | "paused";
 type ReviewHandoffState =
@@ -305,6 +306,8 @@ export function DocumentWorkspace({
       !!documentPage?.content &&
       criticMarkdownHasReviewRail(documentPage.content),
   );
+  const documentHeaderRef =
+    useReviewLayoutShiftAnimation<HTMLDivElement>(documentHasComments);
 
   useEffect(() => {
     setDocumentHasComments(
@@ -528,12 +531,12 @@ export function DocumentWorkspace({
               open={reviewHandoffPopoverOpen}
               onOpenChange={setReviewHandoffPopoverOpen}
             >
-              <div className="relative flex items-center overflow-hidden rounded-[7px] shadow-[0_10px_28px_rgba(0,0,0,0.18)] after:pointer-events-none after:absolute after:top-px after:right-8 after:bottom-px after:z-10 after:w-px after:bg-[#d2cabd] after:content-[''] dark:after:bg-slate-600">
+              <div className="relative flex items-center overflow-hidden rounded-[7px] shadow-[0_10px_28px_rgba(0,0,0,0.18)] after:pointer-events-none after:absolute after:top-px after:right-8 after:bottom-px after:z-10 after:w-px after:bg-[#4a4038] after:content-[''] dark:after:bg-slate-600">
                 <Button
                   type="button"
                   data-testid="review-handoff-button"
                   size="lg"
-                  className="h-9 rounded-r-none rounded-l-[7px] border-0 bg-[#E8E3DB] px-3 text-sm font-bold text-black hover:bg-[#ded8ce] focus-visible:ring-slate-300 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600 dark:focus-visible:ring-slate-600"
+                  className="h-9 rounded-r-none rounded-l-[7px] border-0 bg-[#2B2420] px-3 text-sm font-bold text-white hover:bg-[#3a322b] focus-visible:ring-slate-300 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600 dark:focus-visible:ring-slate-600"
                   disabled={reviewHandoffDisabled}
                   onClick={() =>
                     void handleCompleteReview(
@@ -559,7 +562,7 @@ export function DocumentWorkspace({
                       type="button"
                       data-testid="review-handoff-comment-trigger"
                       size="icon-lg"
-                      className="h-9 w-8 rounded-l-none rounded-r-[7px] border-0 bg-[#E8E3DB] text-black hover:bg-[#ded8ce] focus-visible:ring-slate-300 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600 dark:focus-visible:ring-slate-600"
+                      className="h-9 w-8 rounded-l-none rounded-r-[7px] border-0 bg-[#2B2420] text-white hover:bg-[#3a322b] focus-visible:ring-slate-300 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600 dark:focus-visible:ring-slate-600"
                       disabled={reviewHandoffDisabled}
                       aria-label="Add overall handoff comment"
                     >
@@ -706,14 +709,15 @@ export function DocumentWorkspace({
       <div className="mx-auto min-h-full max-w-[1080px]">
         {documentPage ? (
           <div
+            ref={documentHeaderRef}
             data-testid="document-page-header"
             className={cn(
-              "document-page-shell mb-2 flex flex-col gap-6 text-[0.62rem] font-medium tracking-[0.01em] text-stone-400 min-[1100px]:grid min-[1100px]:grid-cols-[minmax(0,46.5rem)_minmax(24rem,1fr)] min-[1100px]:items-start min-[1100px]:justify-between min-[1100px]:gap-8",
+              "review-layout-grid document-page-shell mb-2 text-[0.62rem] font-medium tracking-[0.01em] text-stone-400",
               !documentHasComments &&
-                "document-page-shell-no-comments min-[1100px]:grid-cols-[minmax(0,46.5rem)] min-[1100px]:justify-center",
+                "review-layout-grid--centered document-page-shell-no-comments",
             )}
           >
-            <div className="document-page-main w-full max-w-[46.5rem] min-w-0">
+            <div className="review-layout-main document-page-main w-full max-w-[46.5rem] min-w-0">
               <div className="flex w-full flex-wrap items-center gap-1.5 px-1">
                 <Tooltip>
                   <TooltipTrigger
@@ -836,12 +840,6 @@ export function DocumentWorkspace({
                 </div>
               </div>
             </div>
-            {documentHasComments ? (
-              <div
-                className="document-comment-rail pointer-events-none invisible hidden min-[1100px]:block"
-                aria-hidden="true"
-              />
-            ) : null}
           </div>
         ) : null}
         {documentPage ? (

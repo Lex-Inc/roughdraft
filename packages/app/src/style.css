@@ -733,3 +733,60 @@
 .document-save-status-saved {
   animation: document-save-status-saved-fade 2s ease-out forwards;
 }
+
+/*
+ * Review layout grid: a single document column that rests centered (no
+ * comments) or shifted-left with a review rail (comments present).
+ *
+ * The visible motion is FLIP-driven by useReviewLayoutShiftAnimation. The grid
+ * moves to its next resting layout immediately, then a temporary inverse
+ * translate animates back to zero. This avoids relying on grid-template-columns
+ * interpolation while the first comment UI mounts.
+ *
+ * Below the breakpoint the shell falls back to a simple stacked column.
+ */
+.review-layout-grid {
+  --review-layout-shift-x: 0px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  transform: translateX(var(--review-layout-shift-x));
+}
+
+@media (min-width: 1100px) {
+  .review-layout-grid {
+    display: grid;
+    /* comments present: document on the left, fixed-width rail on the right */
+    --review-rail-width: 24rem;
+    grid-template-columns: minmax(0, 46.5rem) var(--review-rail-width);
+    justify-content: center;
+    align-items: start;
+    column-gap: 2rem;
+  }
+
+  /* no comments: rail collapses to nothing and the document re-centers */
+  .review-layout-grid.review-layout-grid--centered {
+    --review-rail-width: 0rem;
+    column-gap: 0rem;
+  }
+
+  .review-layout-grid > .review-layout-main {
+    grid-column: 1;
+  }
+
+  .review-layout-grid > .review-layout-rail {
+    grid-column: 2;
+    min-width: 0;
+  }
+}
+
+.review-layout-grid.review-layout-grid--animating {
+  transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .review-layout-grid {
+    transition: none;
+  }
+}

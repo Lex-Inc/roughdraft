@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   createMarkdownProject,
   logE2eEvent,
@@ -96,6 +96,46 @@ test.describe("CriticMarkup review flows", () => {
     });
   });
 
+  test("animates the document layout when the review rail appears and disappears @smoke", async ({
+    page,
+  }) => {
+    const filePath = writeProjectFile(
+      projectDir,
+      "layout-animation.md",
+      [
+        "# Layout Animation",
+        "",
+        "This paragraph has target text to review.",
+        "",
+      ].join("\n"),
+    );
+
+    await openMarkdownFile(page, filePath);
+    await selectRichText(page, "target text");
+    await page.getByTestId("selection-menu-action-comment").waitFor();
+
+    const addSamplesPromise = sampleReviewLayoutAnimation(page);
+    await page.getByTestId("selection-menu-action-comment").click();
+    const addSamples = await addSamplesPromise;
+
+    expect(hasAnimatedReviewLayout(addSamples)).toBe(true);
+    await page
+      .getByTestId("comment-rail-c1-editor")
+      .fill("Clarify this phrase.");
+    await page.getByTestId("comment-rail-c1-action-save").click();
+
+    await page.getByTestId("comment-rail-c1-action-delete-thread").waitFor();
+    const removeSamplesPromise = sampleReviewLayoutAnimation(page);
+    await page.getByTestId("comment-rail-c1-action-delete-thread").click();
+    const removeSamples = await removeSamplesPromise;
+
+    expect(hasAnimatedReviewLayout(removeSamples)).toBe(true);
+
+    logE2eEvent("criticmarkup.layout-animation", {
+      file: "layout-animation.md",
+    });
+  });
+
   test("shows tooltips for selection menu formatting actions", async ({
     page,
   }) => {
@@ -170,3 +210,55 @@ test.describe("CriticMarkup review flows", () => {
     });
   });
 });
+
+type ReviewLayoutAnimationSample = {
+  shellAnimating: boolean;
+  headerAnimating: boolean;
+  shellTranslateX: number;
+  headerTranslateX: number;
+};
+
+async function sampleReviewLayoutAnimation(page: Page) {
+  return page.evaluate(async () => {
+    const readTranslateX = (element: Element | null) => {
+      if (!(element instanceof HTMLElement)) return 0;
+      const transform = getComputedStyle(element).transform;
+      if (transform === "none") return 0;
+      return new DOMMatrixReadOnly(transform).m41;
+    };
+    const samples: ReviewLayoutAnimationSample[] = [];
+    const start = performance.now();
+
+    while (performance.now() - start < 500) {
+      const shell = document.querySelector(
+        '[data-testid="document-page-shell"]',
+      );
+      const header = document.querySelector(
+        '[data-testid="document-page-header"]',
+      );
+      samples.push({
+        shellAnimating:
+          shell instanceof HTMLElement &&
+          shell.classList.contains("review-layout-grid--animating"),
+        headerAnimating:
+          header instanceof HTMLElement &&
+          header.classList.contains("review-layout-grid--animating"),
+        shellTranslateX: readTranslateX(shell),
+        headerTranslateX: readTranslateX(header),
+      });
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+
+    return samples;
+  });
+}
+
+function hasAnimatedReviewLayout(samples: ReviewLayoutAnimationSample[]) {
+  return samples.some(
+    (sample) =>
+      sample.shellAnimating &&
+      sample.headerAnimating &&
+      Math.abs(sample.shellTranslateX) > 1 &&
+      Math.abs(sample.headerTranslateX) > 1,
+  );
+}
