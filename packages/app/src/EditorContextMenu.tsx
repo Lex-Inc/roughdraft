@@ -177,7 +177,7 @@ function SelectionMenuButton({
       data-testid={`selection-menu-action-${toTestIdSegment(label)}`}
       className={`inline-flex size-9 items-center justify-center rounded-xl border text-slate-600 dark:text-slate-400 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 dark:focus-visible:ring-slate-600 ${
         active
-          ? "border-sky-200 bg-sky-100 text-sky-950 shadow-[0_8px_18px_rgba(14,116,144,0.14)] dark:border-sky-500/30 dark:bg-sky-400/20 dark:text-sky-100"
+          ? "border-[#dcd4c8] bg-[#E8E3DB] text-black shadow-[inset_0_1px_0_rgba(255,251,245,0.72)] dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
           : "border-transparent hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100"
       } disabled:cursor-not-allowed disabled:opacity-40`}
       onMouseDown={(event) => {
