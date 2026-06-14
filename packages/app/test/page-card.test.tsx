@@ -1600,6 +1600,17 @@ describe("PageCard editor integration", () => {
       "comment-banner-c1-action-save",
     );
     expect(saveButton).not.toBeNull();
+    expect(saveButton?.className).toContain("rounded-xl");
+    expect(saveButton?.className).toContain("bg-[#E8E3DB]");
+    expect(saveButton?.className).toContain("font-bold");
+    expect(saveButton?.className).toContain("w-full");
+    expect(saveButton?.className).toContain("text-sm");
+    expect(
+      queryByTestId<HTMLButtonElement>(
+        rendered.container,
+        "comment-banner-c1-action-cancel",
+      ),
+    ).toBeNull();
 
     await act(async () => {
       saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));

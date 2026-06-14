@@ -69,6 +69,7 @@ interface DocumentReviewRailProps {
   onFocusSuggestion: (changeId: string) => void;
   onHoverSuggestion: (changeId: string | null) => void;
   pendingFocusCommentId?: string | null;
+  newCommentDraftIds?: string[];
   onAutoFocusComment?: (commentId: string) => void;
   draftSuggestion?: DraftSuggestionState | null;
   onDraftSuggestionTextChange?: (text: string) => void;
@@ -198,6 +199,7 @@ export function DocumentReviewRail({
   onFocusSuggestion,
   onHoverSuggestion,
   pendingFocusCommentId = null,
+  newCommentDraftIds = [],
   onAutoFocusComment,
   draftSuggestion = null,
   onDraftSuggestionTextChange,
@@ -472,6 +474,7 @@ export function DocumentReviewRail({
                   onFocusComment={onFocusComment}
                   onHoverComment={onHoverComment}
                   pendingFocusCommentId={pendingFocusCommentId}
+                  newCommentDraftIds={newCommentDraftIds}
                   onAutoFocusComment={onAutoFocusComment}
                 />
               </div>
@@ -700,6 +703,7 @@ export function DocumentReviewRail({
                   onHoverComment(commentId);
                 }}
                 pendingFocusCommentId={pendingFocusCommentId}
+                newCommentDraftIds={newCommentDraftIds}
                 onAutoFocusComment={onAutoFocusComment}
                 renderCommentContent={renderCommentContent}
                 getCommentActions={getCommentActions}

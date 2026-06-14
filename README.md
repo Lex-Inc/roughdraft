@@ -263,13 +263,7 @@ This is {==highlighted==} text.
 Roughdraft extends those markers with compact id references so review state can round-trip through the file. Root comments and suggestions keep an inline anchor such as `{#c1}` or `{#s1}`, while metadata lives in final YAML endmatter:
 
 ```markdown
-Please revisit {==this sentence==}{>>Needs a source<<}{#c1}.
-
----
-comments:
-  c1:
-    by: user
-    at: "2026-04-28T12:00:00.000Z"
+Please revisit {==this sentence==}{>>Needs a source<<}{id="c1" by="user" at="2026-06-14T06:38:34.897Z"}{>><<}{id="c6" by="user" at="2026-06-14T06:48:16.819Z" re="c1"}. --- comments: c1: by: user at: "2026-04-28T12:00:00.000Z"
 ```
 
 Supported attributes:
@@ -286,18 +280,7 @@ Supported attributes:
 Replies are stored in endmatter with a `body` and `re` pointer:
 
 ```markdown
-Please revisit {==this sentence==}{>>Needs a source<<}{#c1}.
-
----
-comments:
-  c1:
-    by: user
-    at: "2026-04-28T12:00:00.000Z"
-  c2:
-    body: I can add one from the intro.
-    by: AI
-    at: "2026-04-28T12:05:00.000Z"
-    re: c1
+Please revisit {==this sentence==}{>>Needs a source<<}{id="c1" by="user" at="2026-06-14T06:38:34.897Z"}{>><<}{id="c6" by="user" at="2026-06-14T06:48:16.819Z" re="c1"}. --- comments: c1: by: user at: "2026-04-28T12:00:00.000Z" c2: body: I can add one from the intro. by: AI at: "2026-04-28T12:05:00.000Z" re: c1
 ```
 
 Suggested changes can also carry ids and discussion:

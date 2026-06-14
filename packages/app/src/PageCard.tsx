@@ -624,6 +624,7 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
   const [pendingFocusCommentId, setPendingFocusCommentId] = useState<
     string | null
   >(null);
+  const [newCommentDraftIds, setNewCommentDraftIds] = useState<string[]>([]);
 
   const resolveFileUrl = useCallback(
     (path: string) => backend.resolveFileUrl(path),
@@ -1479,6 +1480,9 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
     nextComments.set(comment.id, comment);
     commentsRef.current = nextComments;
     setComments(nextComments);
+    setNewCommentDraftIds((current) =>
+      current.includes(comment.id) ? current : [...current, comment.id],
+    );
 
     suppressNextMarkdownUpdateRef.current = true;
     currentEditor
@@ -1624,6 +1628,9 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
       nextComments.set(commentId, updater(existingComment));
       commentsRef.current = nextComments;
       setComments(nextComments);
+      setNewCommentDraftIds((current) =>
+        current.filter((currentCommentId) => currentCommentId !== commentId),
+      );
       emitMarkdownChange(undefined, nextComments);
     },
     [emitMarkdownChange],
@@ -1803,6 +1810,9 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
       setPendingFocusCommentId((current) =>
         current && deletedIds.has(current) ? null : current,
       );
+      setNewCommentDraftIds((current) =>
+        current.filter((commentId) => !deletedIds.has(commentId)),
+      );
       emitMarkdownChange(currentEditor.getJSON(), nextComments);
       requestAnimationFrame(() => {
         measureLayout();
@@ -1925,6 +1935,7 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
               onSelectComment={selectComment}
               onHoverComment={setHoveredCommentId}
               pendingFocusCommentId={pendingFocusCommentId}
+              newCommentDraftIds={newCommentDraftIds}
               onAutoFocusComment={(commentId) => {
                 setPendingFocusCommentId((current) =>
                   current === commentId ? null : current,
@@ -1997,6 +2008,7 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
           onFocusSuggestion={focusSuggestion}
           onHoverSuggestion={setHoveredChangeId}
           pendingFocusCommentId={pendingFocusCommentId}
+          newCommentDraftIds={newCommentDraftIds}
           onAutoFocusComment={(commentId) => {
             setPendingFocusCommentId((current) =>
               current === commentId ? null : current,
