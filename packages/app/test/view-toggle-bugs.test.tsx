@@ -9,7 +9,9 @@ import {
 import {
   DocumentSaveStatusIndicator,
   DocumentWorkspace,
+  getReviewHandoffButtonLabel,
   isReviewHandoffDisabled,
+  shouldLatchDocumentChangedSinceOpen,
 } from "../src/DocumentWorkspace";
 import type { DocumentSaveState } from "../src/PageCard";
 import type {
@@ -361,39 +363,43 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
     expect(getByTestId(status, "document-save-status-icon")).not.toBeNull();
   });
 
-  it("renders save status next to the filename when handoff exists", async () => {
+  it("renders save status in the fixed corner when handoff exists", async () => {
     await renderWorkspace({ watcherCount: 1 });
 
     const stack = queryByTestId(container, "document-status-stack");
     const header = getByTestId(container, "document-page-header");
+    const corner = getByTestId(container, "document-save-status-corner");
     const doneReviewingButton = queryByTestId(
       container,
       "review-handoff-button",
     );
     expect(stack).not.toBeNull();
     expect(doneReviewingButton).toBeDefined();
-    expect(doneReviewingButton?.textContent).toContain("I'm done");
+    expect(doneReviewingButton?.textContent).toContain("Approve");
     expect(doneReviewingButton?.textContent).not.toContain("Saved");
     expect(stack?.textContent).not.toContain("Saved");
     expect(header.textContent).toContain("test.md");
     expect(header.textContent).not.toContain("Saved");
+    expect(queryByTestId(header, "document-save-status")).toBeNull();
     expect(
-      getByTestId(header, "document-save-status").getAttribute("aria-label"),
+      getByTestId(corner, "document-save-status").getAttribute("aria-label"),
     ).toBe("Saved");
   });
 
-  it("renders save status next to the filename without handoff", async () => {
+  it("renders save status in the fixed corner without handoff", async () => {
     await renderWorkspace();
 
     const stack = queryByTestId(container, "document-status-stack");
     const header = getByTestId(container, "document-page-header");
+    const corner = getByTestId(container, "document-save-status-corner");
     expect(stack).not.toBeNull();
     expect(stack?.textContent).not.toContain("I'm done");
     expect(stack?.textContent).not.toContain("Saved");
     expect(header.textContent).toContain("test.md");
     expect(header.textContent).not.toContain("Saved");
+    expect(queryByTestId(header, "document-save-status")).toBeNull();
     expect(
-      getByTestId(header, "document-save-status").getAttribute("aria-label"),
+      getByTestId(corner, "document-save-status").getAttribute("aria-label"),
     ).toBe("Saved");
   });
 
@@ -545,6 +551,36 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
       }),
     ).toBe(false);
   });
+
+  it("uses approve copy until the user has changed the document", () => {
+    expect(
+      getReviewHandoffButtonLabel({
+        reviewHandoffState: "idle",
+        documentChangedSinceOpen: false,
+      }),
+    ).toBe("Approve");
+    expect(
+      getReviewHandoffButtonLabel({
+        reviewHandoffState: "idle",
+        documentChangedSinceOpen: true,
+      }),
+    ).toBe("I'm done");
+  });
+
+  it("ignores initial editor dirty signals before user input is possible", () => {
+    expect(
+      shouldLatchDocumentChangedSinceOpen({
+        isDirty: true,
+        documentChangeTrackingReady: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldLatchDocumentChangedSinceOpen({
+        isDirty: true,
+        documentChangeTrackingReady: true,
+      }),
+    ).toBe(true);
+  });
 });
 
 describe("interaction mode preserved across view toggle (issue 3 fix)", () => {
@@ -600,18 +636,18 @@ describe("interaction mode preserved across view toggle (issue 3 fix)", () => {
       });
     };
 
-    // Mount with rich-text -> mode is "Editing" by default
+    // Mount with rich-text -> mode is "Suggesting" by default
     await renderWorkspace("rich-text");
     expect(
       getByTestId(container, "document-mode-trigger").textContent,
-    ).toContain("Editing");
+    ).toContain("Suggesting");
 
     // Rerender with code view (same component instance, no remount) ->
-    // mode stays "Editing" because the component is not destroyed.
+    // mode stays "Suggesting" because the component is not destroyed.
     await renderWorkspace("code");
     expect(
       getByTestId(container, "document-mode-trigger").textContent,
-    ).toContain("Editing");
+    ).toContain("Suggesting");
   });
 });
 
@@ -678,6 +714,7 @@ describe("review handoff watcher affordance", () => {
 
     await renderWorkspace({ getWatcherCount: () => 0, onCompleteReview });
 
+    expect(container.textContent).not.toContain("Approve");
     expect(container.textContent).not.toContain("I'm done");
     expect(container.textContent).not.toContain("Review ready");
     expect(container.textContent).not.toContain("Copy prompt");
@@ -696,6 +733,7 @@ describe("review handoff watcher affordance", () => {
       "review-handoff-button",
     );
     expect(doneReviewingButton).toBeDefined();
+    expect(doneReviewingButton?.textContent).toContain("Approve");
     expect(container.textContent).not.toContain("Agent waiting");
     expect(queryByTestId(container, "review-handoff-status")).toBeNull();
 
@@ -731,6 +769,7 @@ describe("review handoff watcher affordance", () => {
 
     expect(onCompleteReview).toHaveBeenCalledOnce();
     expect(container.textContent).toContain("Not sent");
+    expect(container.textContent).not.toContain("Approve");
     expect(container.textContent).not.toContain("I'm done");
   });
 
@@ -852,6 +891,7 @@ describe("review handoff watcher affordance", () => {
     expect(onCompleteReview).toHaveBeenCalledOnce();
     expect(container.textContent).toContain("Sent");
     expect(container.textContent).not.toContain("Agent notified");
+    expect(container.textContent).not.toContain("Approve");
     expect(container.textContent).not.toContain("I'm done");
   });
 
@@ -884,6 +924,7 @@ describe("review handoff watcher affordance", () => {
     });
 
     expect(container.textContent).toContain("Sent");
+    expect(container.textContent).not.toContain("Approve");
     expect(container.textContent).not.toContain("I'm done");
 
     watcherCount = 1;
@@ -895,7 +936,7 @@ describe("review handoff watcher affordance", () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain("I'm done");
+    expect(container.textContent).toContain("Approve");
     expect(container.textContent).not.toContain("Sent");
   });
 });

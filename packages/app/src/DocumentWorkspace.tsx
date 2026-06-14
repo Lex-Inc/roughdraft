@@ -239,6 +239,34 @@ export function isReviewHandoffDisabled({
   );
 }
 
+export function getReviewHandoffButtonLabel({
+  reviewHandoffState,
+  documentChangedSinceOpen,
+}: {
+  reviewHandoffState: ReviewHandoffState;
+  documentChangedSinceOpen: boolean;
+}) {
+  return reviewHandoffState === "notifying"
+    ? "Sending"
+    : reviewHandoffState === "notified"
+      ? "Sent"
+      : reviewHandoffState === "error" || reviewHandoffState === "undelivered"
+        ? "Not sent"
+        : documentChangedSinceOpen
+          ? "I'm done"
+          : "Approve";
+}
+
+export function shouldLatchDocumentChangedSinceOpen({
+  isDirty,
+  documentChangeTrackingReady,
+}: {
+  isDirty: boolean;
+  documentChangeTrackingReady: boolean;
+}) {
+  return isDirty && documentChangeTrackingReady;
+}
+
 interface DocumentWorkspaceProps {
   documentPage: Page | null;
   activeDocumentPath: string | null;
@@ -279,7 +307,7 @@ export function DocumentWorkspace({
   backend,
 }: DocumentWorkspaceProps) {
   const [documentInteractionMode, setDocumentInteractionMode] =
-    useState<DocumentInteractionMode>("editing");
+    useState<DocumentInteractionMode>("suggesting");
   const [saveState, setSaveState] = useState<DocumentSaveState>("saved");
   const [reviewHandoffState, setReviewHandoffState] =
     useState<ReviewHandoffState>("idle");
@@ -290,8 +318,11 @@ export function DocumentWorkspace({
   const [copiedFileAction, setCopiedFileAction] =
     useState<FileCopyAction | null>(null);
   const [overallComment, setOverallComment] = useState("");
+  const [documentChangedSinceOpen, setDocumentChangedSinceOpen] =
+    useState(false);
   const sawNoWatcherAfterNotifiedRef = useRef(false);
   const saveControllerRef = useRef<DocumentSaveController | null>(null);
+  const documentChangeTrackingReadyRef = useRef(false);
 
   const handleSaveStateChange = useCallback(
     (state: DocumentSaveState) => {
@@ -319,7 +350,13 @@ export function DocumentWorkspace({
   useEffect(() => {
     const documentIdentity = `${activeDocumentPath ?? ""}:${documentPage?.id ?? ""}`;
     if (!documentIdentity) return;
+    documentChangeTrackingReadyRef.current = false;
     setReviewHandoffState("idle");
+    setDocumentChangedSinceOpen(false);
+    const readyTimer = window.setTimeout(() => {
+      documentChangeTrackingReadyRef.current = true;
+    }, 0);
+    return () => window.clearTimeout(readyTimer);
   }, [activeDocumentPath, documentPage?.id]);
 
   useEffect(() => {
@@ -430,6 +467,21 @@ export function DocumentWorkspace({
     [activeDocumentPath, onCompleteReview, reviewHandoffState],
   );
 
+  const handleDocumentDirtyStateChange = useCallback(
+    (isDirty: boolean) => {
+      if (
+        shouldLatchDocumentChangedSinceOpen({
+          isDirty,
+          documentChangeTrackingReady: documentChangeTrackingReadyRef.current,
+        })
+      ) {
+        setDocumentChangedSinceOpen(true);
+      }
+      onDocumentDirtyStateChange(isDirty);
+    },
+    [onDocumentDirtyStateChange],
+  );
+
   const handleCopyFileMenuAction = useCallback(
     async (action: FileCopyAction) => {
       if (!documentPage) return;
@@ -476,14 +528,10 @@ export function DocumentWorkspace({
   const showReviewHandoffButton =
     !!activeDocumentPath &&
     (reviewWatcherCount > 0 || reviewHandoffState !== "idle");
-  const reviewHandoffButtonLabel =
-    reviewHandoffState === "notifying"
-      ? "Sending"
-      : reviewHandoffState === "notified"
-        ? "Sent"
-        : reviewHandoffState === "error" || reviewHandoffState === "undelivered"
-          ? "Not sent"
-          : "I'm done";
+  const reviewHandoffButtonLabel = getReviewHandoffButtonLabel({
+    reviewHandoffState,
+    documentChangedSinceOpen,
+  });
   const ReviewHandoffButtonIcon =
     reviewHandoffState === "notifying"
       ? Loader2
@@ -517,6 +565,17 @@ export function DocumentWorkspace({
       )}
     >
       <RemoteSessionBanner backend={backend} />
+      {documentPage ? (
+        <div
+          className="fixed top-3 left-3 z-[60]"
+          data-testid="document-save-status-corner"
+        >
+          <DocumentSaveStatusIndicator
+            saveState={saveState}
+            diskChangeState={documentDiskChangeState}
+          />
+        </div>
+      ) : null}
       <div
         className={cn(
           "fixed right-3 z-[60] flex max-w-[min(16rem,calc(100vw-1rem))] flex-col items-end gap-1.5",
@@ -605,7 +664,7 @@ export function DocumentWorkspace({
                         }
                         maxLength={4000}
                         rows={4}
-                        className="min-h-24 resize-y"
+                        className="min-h-24 resize-none"
                       />
                     </div>
                     <Button
@@ -767,7 +826,7 @@ export function DocumentWorkspace({
                       <button
                         type="button"
                         data-testid="document-file-menu-trigger"
-                        className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-1 py-0.5 font-mono text-[0.7rem] tracking-[0.01em] text-stone-400 outline-none transition hover:bg-[#EEE9E1] hover:text-stone-600 focus-visible:ring-2 focus-visible:ring-stone-300/70 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 dark:focus-visible:ring-slate-600/70"
+                        className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-1 py-0.5 font-mono text-[0.8rem] tracking-[0.01em] text-stone-400 outline-none transition hover:bg-[#EEE9E1] hover:text-stone-600 focus-visible:ring-2 focus-visible:ring-stone-300/70 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 dark:focus-visible:ring-slate-600/70"
                         title={documentFilenameLabel}
                         aria-label="Document file actions"
                       >
@@ -805,10 +864,6 @@ export function DocumentWorkspace({
                     </div>
                   </PopoverContent>
                 </Popover>
-                <DocumentSaveStatusIndicator
-                  saveState={saveState}
-                  diskChangeState={documentDiskChangeState}
-                />
                 <div className="ml-auto inline-flex h-[1.25rem] shrink-0 items-center">
                   <Select<DocumentInteractionMode>
                     value={documentInteractionMode}
@@ -819,7 +874,7 @@ export function DocumentWorkspace({
                     <SelectTrigger
                       data-testid="document-mode-trigger"
                       aria-label="Document mode"
-                      className="h-[1.5rem] px-1 font-mono text-[0.7rem] leading-[1.25rem] font-normal tracking-[0.01em] text-stone-400 dark:text-slate-400 hover:text-stone-500 dark:hover:text-slate-300"
+                      className="h-[1.5rem] px-1 font-mono text-[0.8rem] leading-[1.25rem] font-normal tracking-[0.01em] text-stone-400 dark:text-slate-400 hover:text-stone-500 dark:hover:text-slate-300"
                     >
                       <ActiveDocumentInteractionModeIcon className="size-[0.68rem]" />
                       <span className="truncate">
@@ -855,7 +910,7 @@ export function DocumentWorkspace({
               interactionMode={documentInteractionMode}
               backend={backend}
               onCommentRailPresenceChange={setDocumentHasComments}
-              onDirtyStateChange={onDocumentDirtyStateChange}
+              onDirtyStateChange={handleDocumentDirtyStateChange}
               onLocalContentChange={onDocumentLocalContentChange}
               onSaveControllerChange={(controller) => {
                 saveControllerRef.current = controller;
