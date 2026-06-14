@@ -33,6 +33,8 @@ import { SUGGESTED_PARAGRAPH_SENTINEL } from "./editor-extensions";
 import { cn } from "./lib/utils";
 import type { DraftSuggestionState } from "./PageCard";
 
+const SUGGESTION_QUOTE_PREVIEW_LIMIT = 140;
+
 export interface CriticChangeRailItem {
   changeId: string;
   change: CriticChangeAttrs;
@@ -114,16 +116,22 @@ function getSuggestionRootComment(
   };
 }
 
+function truncateSuggestionQuote(text: string) {
+  if (text.length <= SUGGESTION_QUOTE_PREVIEW_LIMIT) return text;
+  return `${text.slice(0, SUGGESTION_QUOTE_PREVIEW_LIMIT)}...`;
+}
+
 function renderQuotedSuggestionText(text: string, fallback: string) {
   const withoutParagraphSentinels = text.replaceAll(
     SUGGESTED_PARAGRAPH_SENTINEL,
     "",
   );
-  const displayText =
+  const fullDisplayText =
     withoutParagraphSentinels.trim() ||
     (text.includes(SUGGESTED_PARAGRAPH_SENTINEL)
       ? "Inserted paragraph"
       : fallback);
+  const displayText = truncateSuggestionQuote(fullDisplayText);
 
   return (
     <span className="italic text-slate-600 dark:text-slate-400">
