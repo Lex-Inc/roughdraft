@@ -265,6 +265,7 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
     });
     container.remove();
     Reflect.deleteProperty(globalThis, "ClipboardItem");
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -419,6 +420,51 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
     await click(getByTestId(document.body, `document-file-menu-${action}`));
 
     expect(writeText).toHaveBeenCalledWith(text);
+  });
+
+  it("keeps the file menu open and shows temporary copied feedback", async () => {
+    vi.useFakeTimers();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    await renderWorkspace({ documentContent: "# Heading\n\nBody" });
+    await openFileMenu();
+    await click(getByTestId(document.body, "document-file-menu-path"));
+
+    const menu = getByTestId(document.body, "document-file-menu");
+    expect(menu.textContent).toContain("Copied!");
+    expect(menu.textContent).not.toContain("Copy:");
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+      await Promise.resolve();
+    });
+
+    expect(getByTestId(document.body, "document-file-menu").textContent).toContain(
+      "Path",
+    );
+    vi.useRealTimers();
+  });
+
+  it("shows copy previews below each file menu action", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+
+    await renderWorkspace({ documentContent: "# Heading\n\nBody" });
+    await openFileMenu();
+
+    const menu = getByTestId(document.body, "document-file-menu");
+    expect(menu.textContent).toContain("Path");
+    expect(menu.textContent).toContain("test.md");
+    expect(menu.textContent).toContain("Filename");
+    expect(menu.textContent).toContain("Markdown");
+    expect(menu.textContent).toContain("# Heading Body");
+    expect(menu.textContent).toContain("Rich text");
   });
 
   it("copies document rich text with html and plain markdown flavors", async () => {

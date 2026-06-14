@@ -4,6 +4,7 @@ import {
   CheckCheck,
   ChevronDown,
   CodeXml,
+  Copy,
   Eye,
   Loader2,
   MessageSquarePlus,
@@ -53,6 +54,7 @@ type ReviewHandoffState =
   | "undelivered"
   | "error";
 type FileCopyAction = "path" | "filename" | "markdown" | "rich-text";
+const FILE_COPY_PREVIEW_MAX_LENGTH = 34;
 
 const documentInteractionModeOptions = [
   { value: "editing", label: "Editing", Icon: PencilLine },
@@ -86,14 +88,20 @@ const conflictNoticeCopy: Record<
 };
 
 const fileCopyMenuOptions = [
-  { action: "path", label: "Copy path" },
-  { action: "filename", label: "Copy filename" },
-  { action: "markdown", label: "Copy markdown" },
-  { action: "rich-text", label: "Copy rich text" },
+  { action: "path", label: "Path" },
+  { action: "filename", label: "Filename" },
+  { action: "markdown", label: "Markdown" },
+  { action: "rich-text", label: "Rich text" },
 ] satisfies {
   action: FileCopyAction;
   label: string;
 }[];
+
+function formatFileCopyPreview(value: string) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= FILE_COPY_PREVIEW_MAX_LENGTH) return normalized;
+  return `${normalized.slice(0, FILE_COPY_PREVIEW_MAX_LENGTH - 1)}...`;
+}
 
 async function writePlainTextToClipboard(text: string) {
   await navigator.clipboard.writeText(text);
@@ -321,6 +329,7 @@ export function DocumentWorkspace({
   const [documentChangedSinceOpen, setDocumentChangedSinceOpen] =
     useState(false);
   const sawNoWatcherAfterNotifiedRef = useRef(false);
+  const copiedFileActionTimeoutRef = useRef<number | null>(null);
   const saveControllerRef = useRef<DocumentSaveController | null>(null);
   const documentChangeTrackingReadyRef = useRef(false);
 
@@ -408,6 +417,14 @@ export function DocumentWorkspace({
       setReviewHandoffState("idle");
     }
   }, [reviewHandoffState, reviewWatcherCount]);
+
+  useEffect(() => {
+    return () => {
+      if (copiedFileActionTimeoutRef.current !== null) {
+        window.clearTimeout(copiedFileActionTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!documentPage) return;
@@ -503,8 +520,13 @@ export function DocumentWorkspace({
         }
 
         setCopiedFileAction(action);
-        window.setTimeout(() => setCopiedFileAction(null), 1400);
-        setFileCopyMenuOpen(false);
+        if (copiedFileActionTimeoutRef.current !== null) {
+          window.clearTimeout(copiedFileActionTimeoutRef.current);
+        }
+        copiedFileActionTimeoutRef.current = window.setTimeout(() => {
+          setCopiedFileAction(null);
+          copiedFileActionTimeoutRef.current = null;
+        }, 3000);
       } catch (error) {
         console.error("Failed to copy document data:", error);
       }
@@ -516,6 +538,12 @@ export function DocumentWorkspace({
     documentEditorViewMode === "rich-text"
       ? "Switch to code view"
       : "Switch to rich text view";
+  const fileCopyPreviewByAction: Record<FileCopyAction, string> = {
+    path: formatFileCopyPreview(activeDocumentPath ?? documentFilenameLabel),
+    filename: formatFileCopyPreview(documentFilenameLabel),
+    markdown: formatFileCopyPreview(documentPage?.content ?? ""),
+    "rich-text": formatFileCopyPreview(documentPage?.content ?? ""),
+  };
   const activeDocumentInteractionMode = documentInteractionModeOptions.find(
     (option) => option.value === documentInteractionMode,
   );
@@ -843,8 +871,9 @@ export function DocumentWorkspace({
                   <PopoverContent
                     aria-label="Document file actions"
                     data-testid="document-file-menu"
-                    className="w-44 p-1"
+                    className="w-56 p-1"
                     align="start"
+                    sideOffset={4}
                   >
                     <div className="flex flex-col">
                       {fileCopyMenuOptions.map(({ action, label }) => (
@@ -852,12 +881,25 @@ export function DocumentWorkspace({
                           key={action}
                           type="button"
                           data-testid={`document-file-menu-${action}`}
-                          className="flex h-8 items-center justify-between rounded-md px-2 text-left text-[0.72rem] leading-none text-stone-700 outline-none transition hover:bg-[#EEE9E1] focus-visible:bg-[#EEE9E1] dark:text-stone-300 dark:hover:bg-slate-700 dark:focus-visible:bg-slate-700"
+                          className="flex items-start gap-2 rounded-md px-2 py-1.5 text-left text-[0.72rem] leading-none text-stone-700 outline-none transition hover:bg-[#EEE9E1] focus-visible:bg-[#EEE9E1] dark:text-stone-300 dark:hover:bg-slate-700 dark:focus-visible:bg-slate-700"
                           onClick={() => void handleCopyFileMenuAction(action)}
                         >
-                          <span>{label}</span>
+                          <Copy
+                            className="mt-[0.06rem] size-4 shrink-0 text-stone-500 dark:text-slate-400"
+                            aria-hidden="true"
+                          />
+                          <span className="grid min-w-0 flex-1 gap-1">
+                            <span className="truncate font-semibold">
+                              {copiedFileAction === action
+                                ? "Copied!"
+                                : label}
+                            </span>
+                            <span className="truncate text-[0.66rem] leading-none text-stone-400 dark:text-slate-500">
+                              {fileCopyPreviewByAction[action]}
+                            </span>
+                          </span>
                           {copiedFileAction === action ? (
-                            <Check className="size-3 text-stone-500 dark:text-stone-400" />
+                            <Check className="mt-[0.06rem] ml-auto size-3 shrink-0 text-stone-500 dark:text-stone-400" />
                           ) : null}
                         </button>
                       ))}
