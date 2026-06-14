@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   createMarkdownProject,
+  logE2eEvent,
   openMarkdownFile,
   readProjectFile,
   removeMarkdownProject,
@@ -70,5 +71,43 @@ test.describe("review handoff", () => {
         comments: 1,
       },
     });
+  });
+
+  test("reopens the sent handoff status from the muted primary button", async ({
+    page,
+    request,
+  }) => {
+    const filePath = writeProjectFile(
+      projectDir,
+      "sent-handoff.md",
+      ["# Sent Handoff", "", "Review already completed.", ""].join("\n"),
+    );
+    const relativePath = "sent-handoff.md";
+
+    pendingWatch = request.post("/api/review-events/watch", {
+      data: {
+        projectPath: projectDir,
+        path: relativePath,
+        timeoutSeconds: 10,
+      },
+    });
+
+    await openMarkdownFile(page, filePath);
+    await page.getByTestId("review-handoff-button").click();
+
+    await expect(page.getByTestId("review-handoff-button")).toHaveText("Sent");
+    await expect(page.getByTestId("review-handoff-status")).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("review-handoff-status")).toBeHidden();
+
+    await page.getByTestId("review-handoff-button").click();
+
+    await expect(page.getByTestId("review-handoff-status")).toBeVisible();
+    logE2eEvent("review-handoff.sent-button-reopened-status", {
+      buttonLabel: await page.getByTestId("review-handoff-button").innerText(),
+    });
+
+    await pendingWatch;
   });
 });

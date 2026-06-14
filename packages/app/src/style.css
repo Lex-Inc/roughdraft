@@ -73,6 +73,20 @@
 }
 
 @layer components {
+  .review-handoff-robots .flash {
+    transform-origin: 340px 165px;
+    opacity: 0;
+  }
+
+  .review-handoff-robots .flash.pop {
+    animation: review-handoff-robots-pop 450ms ease-out;
+  }
+
+  .review-handoff-robots .bob-l.hop,
+  .review-handoff-robots .bob-r.hop {
+    animation: review-handoff-robots-hop 400ms ease-out;
+  }
+
   .tiptap {
     @apply min-h-[120px] text-slate-800 dark:text-slate-200 outline-none;
     --editor-font-size: 16px;
@@ -593,6 +607,31 @@
   .rfm-result-editor .tiptap h3 {
     margin-top: 1em;
     font-size: 1.12em;
+  }
+}
+
+@keyframes review-handoff-robots-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+@keyframes review-handoff-robots-hop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  45% {
+    transform: translateY(-7px);
   }
 }
 
