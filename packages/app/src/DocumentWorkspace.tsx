@@ -34,9 +34,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "./components/ui/tooltip";
-import { criticMarkdownHasReviewRail } from "./critic-markup";
+import {
+  criticMarkdownHasReviewRail,
+  criticMarkdownToRenderedHtml,
+} from "./critic-markup";
 import { cn } from "./lib/utils";
-import { toHtml } from "./markdown";
 import {
   type DocumentInteractionMode,
   type DocumentSaveController,
@@ -107,22 +109,69 @@ async function writePlainTextToClipboard(text: string) {
   await navigator.clipboard.writeText(text);
 }
 
+function markdownToPlainText(markdown: string) {
+  const template = document.createElement("template");
+  template.innerHTML = markdownToCleanRichHtml(markdown);
+  return (template.content.textContent ?? "").trimEnd();
+}
+
+function unwrapElement(element: HTMLElement) {
+  element.replaceWith(...element.childNodes);
+}
+
+function markdownToCleanRichHtml(markdown: string) {
+  const template = document.createElement("template");
+  template.innerHTML = criticMarkdownToRenderedHtml(markdown).html;
+
+  for (const element of Array.from(
+    template.content.querySelectorAll<HTMLElement>(
+      "[data-comment-anchorless='true']",
+    ),
+  )) {
+    element.remove();
+  }
+
+  for (const element of Array.from(
+    template.content.querySelectorAll<HTMLElement>("[data-comment-ids]"),
+  )) {
+    unwrapElement(element);
+  }
+
+  for (const element of Array.from(
+    template.content.querySelectorAll<HTMLElement>(
+      "[data-critic-change-kind='addition'], [data-critic-change-kind='substitution-new']",
+    ),
+  )) {
+    element.remove();
+  }
+
+  for (const element of Array.from(
+    template.content.querySelectorAll<HTMLElement>("[data-critic-change-kind]"),
+  )) {
+    unwrapElement(element);
+  }
+
+  return template.innerHTML;
+}
+
 async function writeRichTextToClipboard(markdown: string) {
   const clipboardWithRichText = navigator.clipboard as Clipboard & {
     write?: Clipboard["write"];
   };
+  const html = markdownToCleanRichHtml(markdown);
+  const plainText = markdownToPlainText(markdown);
 
   if (clipboardWithRichText.write && typeof ClipboardItem !== "undefined") {
     await clipboardWithRichText.write([
       new ClipboardItem({
-        "text/html": new Blob([toHtml(markdown)], { type: "text/html" }),
-        "text/plain": new Blob([markdown], { type: "text/plain" }),
+        "text/html": new Blob([html], { type: "text/html" }),
+        "text/plain": new Blob([plainText], { type: "text/plain" }),
       }),
     ]);
     return;
   }
 
-  await writePlainTextToClipboard(markdown);
+  await writePlainTextToClipboard(plainText);
 }
 
 function getSaveStatusViewModel(
@@ -278,6 +327,7 @@ export function shouldLatchDocumentChangedSinceOpen({
 interface DocumentWorkspaceProps {
   documentPage: Page | null;
   activeDocumentPath: string | null;
+  documentCopyPath: string | null;
   documentFilenameLabel: string;
   documentEditorViewMode: DocumentEditorViewMode;
   onDocumentEditorViewModeChange: (mode: DocumentEditorViewMode) => void;
@@ -299,6 +349,7 @@ interface DocumentWorkspaceProps {
 export function DocumentWorkspace({
   documentPage,
   activeDocumentPath,
+  documentCopyPath,
   documentFilenameLabel,
   documentEditorViewMode,
   onDocumentEditorViewModeChange,
@@ -507,7 +558,7 @@ export function DocumentWorkspace({
         Exclude<FileCopyAction, "rich-text">,
         string
       > = {
-        path: activeDocumentPath ?? documentFilenameLabel,
+        path: documentCopyPath ?? activeDocumentPath ?? documentFilenameLabel,
         filename: documentFilenameLabel,
         markdown: documentPage.content,
       };
@@ -531,7 +582,7 @@ export function DocumentWorkspace({
         console.error("Failed to copy document data:", error);
       }
     },
-    [activeDocumentPath, documentFilenameLabel, documentPage],
+    [activeDocumentPath, documentCopyPath, documentFilenameLabel, documentPage],
   );
 
   const editorViewModeToggleLabel =
@@ -539,10 +590,14 @@ export function DocumentWorkspace({
       ? "Switch to code view"
       : "Switch to rich text view";
   const fileCopyPreviewByAction: Record<FileCopyAction, string> = {
-    path: formatFileCopyPreview(activeDocumentPath ?? documentFilenameLabel),
+    path: formatFileCopyPreview(
+      documentCopyPath ?? activeDocumentPath ?? documentFilenameLabel,
+    ),
     filename: formatFileCopyPreview(documentFilenameLabel),
     markdown: formatFileCopyPreview(documentPage?.content ?? ""),
-    "rich-text": formatFileCopyPreview(documentPage?.content ?? ""),
+    "rich-text": formatFileCopyPreview(
+      documentPage ? markdownToPlainText(documentPage.content) : "",
+    ),
   };
   const activeDocumentInteractionMode = documentInteractionModeOptions.find(
     (option) => option.value === documentInteractionMode,
@@ -854,7 +909,7 @@ export function DocumentWorkspace({
                       <button
                         type="button"
                         data-testid="document-file-menu-trigger"
-                        className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-1 py-0.5 font-mono text-[0.8rem] tracking-[0.01em] text-stone-400 outline-none transition hover:bg-[#EEE9E1] hover:text-stone-600 focus-visible:ring-2 focus-visible:ring-stone-300/70 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 dark:focus-visible:ring-slate-600/70"
+                        className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-1 py-0.5 text-[0.8rem] font-medium tracking-[0.01em] text-stone-400 outline-none transition hover:text-stone-500 focus-visible:ring-2 focus-visible:ring-stone-300/70 dark:text-slate-400 dark:hover:text-slate-300 dark:focus-visible:ring-slate-600/70"
                         title={documentFilenameLabel}
                         aria-label="Document file actions"
                       >
@@ -889,7 +944,7 @@ export function DocumentWorkspace({
                             aria-hidden="true"
                           />
                           <span className="grid min-w-0 flex-1 gap-1">
-                            <span className="truncate font-semibold">
+                            <span className="truncate font-medium">
                               {copiedFileAction === action
                                 ? "Copied!"
                                 : label}
@@ -916,9 +971,9 @@ export function DocumentWorkspace({
                     <SelectTrigger
                       data-testid="document-mode-trigger"
                       aria-label="Document mode"
-                      className="h-[1.5rem] px-1 font-mono text-[0.8rem] leading-[1.25rem] font-normal tracking-[0.01em] text-stone-400 dark:text-slate-400 hover:text-stone-500 dark:hover:text-slate-300"
+                      className="h-[1.5rem] gap-1.5 px-1 text-[0.8rem] leading-[1.25rem] font-medium tracking-[0.01em] text-stone-400 dark:text-slate-400 hover:text-stone-500 dark:hover:text-slate-300"
                     >
-                      <ActiveDocumentInteractionModeIcon className="size-[0.68rem]" />
+                      <ActiveDocumentInteractionModeIcon className="size-[0.8rem]" />
                       <span className="truncate">
                         {activeDocumentInteractionMode?.label}
                       </span>
@@ -926,9 +981,16 @@ export function DocumentWorkspace({
                     <SelectContent>
                       {documentInteractionModeOptions.map(
                         ({ value, label, Icon }) => (
-                          <SelectItem key={value} value={value} label={label}>
+                          <SelectItem
+                            key={value}
+                            value={value}
+                            label={label}
+                            className="text-[0.8rem]"
+                          >
                             <Icon className="size-3 text-stone-500 dark:text-slate-400" />
-                            <SelectItemText>{label}</SelectItemText>
+                            <SelectItemText className="font-medium">
+                              {label}
+                            </SelectItemText>
                           </SelectItem>
                         ),
                       )}

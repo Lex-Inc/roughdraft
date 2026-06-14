@@ -1451,6 +1451,7 @@ export function PreviewPage() {
       <DocumentWorkspace
         documentPage={previewPage}
         activeDocumentPath={PREVIEW_DOCUMENT_PATH}
+        documentCopyPath={PREVIEW_DOCUMENT_PATH}
         documentFilenameLabel={PREVIEW_DOCUMENT_PATH}
         documentEditorViewMode={editorViewMode}
         onDocumentEditorViewModeChange={setEditorViewMode}
@@ -1939,6 +1940,7 @@ export function App() {
       <DocumentWorkspace
         documentPage={documentPage}
         activeDocumentPath={activeDocumentPath}
+        documentCopyPath={documentAbsolutePath}
         documentFilenameLabel={documentFilenameLabel}
         documentEditorViewMode={documentEditorViewMode}
         onDocumentEditorViewModeChange={handleDocumentEditorViewModeChange}

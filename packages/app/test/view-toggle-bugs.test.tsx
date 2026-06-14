@@ -290,11 +290,13 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
   async function renderWorkspace({
     documentDiskChangeState = "clean",
     documentContent = "Hello world",
+    documentCopyPath = "test.md",
     watcherCount = 0,
     onSaveDocument = async () => {},
   }: {
     documentDiskChangeState?: "clean" | "changed" | "conflict" | "paused";
     documentContent?: string;
+    documentCopyPath?: string | null;
     watcherCount?: number;
     onSaveDocument?: (id: string, content: string) => Promise<void>;
   } = {}) {
@@ -307,6 +309,7 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
         <DocumentWorkspace
           documentPage={createPage(documentContent)}
           activeDocumentPath="test.md"
+          documentCopyPath={documentCopyPath}
           documentFilenameLabel="test.md"
           documentEditorViewMode="rich-text"
           onDocumentEditorViewModeChange={() => {}}
@@ -405,7 +408,7 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
   });
 
   it.each([
-    ["path", "test.md"],
+    ["path", "/Users/me/project/test.md"],
     ["filename", "test.md"],
     ["markdown", "# Heading\n\nBody"],
   ] as const)("copies document %s from the file menu", async (action, text) => {
@@ -415,7 +418,10 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
       value: { writeText },
     });
 
-    await renderWorkspace({ documentContent: "# Heading\n\nBody" });
+    await renderWorkspace({
+      documentContent: "# Heading\n\nBody",
+      documentCopyPath: "/Users/me/project/test.md",
+    });
     await openFileMenu();
     await click(getByTestId(document.body, `document-file-menu-${action}`));
 
@@ -465,6 +471,12 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
     expect(menu.textContent).toContain("Markdown");
     expect(menu.textContent).toContain("# Heading Body");
     expect(menu.textContent).toContain("Rich text");
+    const richTextAction = getByTestId(
+      document.body,
+      "document-file-menu-rich-text",
+    );
+    expect(richTextAction.textContent).toContain("Heading Body");
+    expect(richTextAction.textContent).not.toContain("# Heading");
   });
 
   it("copies document rich text with html and plain markdown flavors", async () => {
@@ -496,9 +508,59 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
       "text/html": expect.any(Blob),
       "text/plain": expect.any(Blob),
     });
+    await expect(clipboardItems[0]["text/html"].text()).resolves.toContain(
+      "<h1>Heading</h1>",
+    );
+    await expect(clipboardItems[0]["text/plain"].text()).resolves.toBe(
+      "Heading\nBody",
+    );
     expect(write).toHaveBeenCalledWith([
       expect.objectContaining({ items: expect.any(Object) }),
     ]);
+  });
+
+  it("strips comments and suggestions from copied rich text", async () => {
+    const write = vi.fn().mockResolvedValue(undefined);
+    const clipboardItems: Array<Record<string, Blob>> = [];
+    class ClipboardItemMock {
+      items: Record<string, Blob>;
+
+      constructor(items: Record<string, Blob>) {
+        this.items = items;
+        clipboardItems.push(items);
+      }
+    }
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { write },
+    });
+    Object.defineProperty(globalThis, "ClipboardItem", {
+      configurable: true,
+      value: ClipboardItemMock,
+    });
+
+    await renderWorkspace({
+      documentContent:
+        "Keep {==the launch date==}{>>Verify this.<<}{#c1}, omit {++new claim++}{#s1}, keep {--old claim--}{#s2}, and use {~~rough~>polished~~}{#s3} wording.\n\n{>>Standalone note<<}{#c2}\n\n---\ncomments:\n  c1:\n    by: user\n    at: \"2026-04-28T12:00:00.000Z\"\n  c2:\n    by: user\n    at: \"2026-04-28T12:01:00.000Z\"\nsuggestions:\n  s1:\n    by: AI\n    at: \"2026-04-28T12:02:00.000Z\"\n  s2:\n    by: AI\n    at: \"2026-04-28T12:03:00.000Z\"\n  s3:\n    by: AI\n    at: \"2026-04-28T12:04:00.000Z\"\n",
+    });
+    await openFileMenu();
+    await click(getByTestId(document.body, "document-file-menu-rich-text"));
+
+    const html = await clipboardItems[0]["text/html"].text();
+    const plain = await clipboardItems[0]["text/plain"].text();
+
+    expect(html).toContain("Keep the launch date");
+    expect(html).toContain("old claim");
+    expect(html).toContain("rough");
+    expect(html).not.toContain("Verify this");
+    expect(html).not.toContain("Standalone note");
+    expect(html).not.toContain("new claim");
+    expect(html).not.toContain("polished");
+    expect(html).not.toContain("data-comment-ids");
+    expect(html).not.toContain("data-critic-change-kind");
+    expect(plain).toBe(
+      "Keep the launch date, omit , keep old claim, and use rough wording.",
+    );
   });
 
   it.each([

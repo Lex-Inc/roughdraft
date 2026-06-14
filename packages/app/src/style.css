@@ -757,7 +757,7 @@
   .review-layout-grid {
     display: grid;
     /* comments present: document on the left, fixed-width rail on the right */
-    --review-rail-width: 24rem;
+    --review-rail-width: 18rem;
     grid-template-columns: minmax(0, 46.5rem) var(--review-rail-width);
     justify-content: center;
     align-items: start;
