@@ -509,6 +509,18 @@ describe("Homepage", () => {
       expect(sceneNodes[index]?.textContent).toContain(scene);
     });
 
+    const firstSceneDescription = sceneNodes[0]?.querySelector("p");
+    expect(firstSceneDescription?.textContent).toContain(
+      "Start in the same agent chat you already use.",
+    );
+    expect(firstSceneDescription?.className).toContain("font-sans");
+    expect(firstSceneDescription?.className).toContain(
+      "text-[clamp(1rem,0.95rem+0.25vw,1.125rem)]",
+    );
+    expect(firstSceneDescription?.className).toContain("leading-7");
+    expect(firstSceneDescription?.className).toContain("font-medium");
+    expect(firstSceneDescription?.className).toContain("text-slate-950");
+
     expect(storyboard.textContent).toContain(
       "Let's make the homepage more persuasive. Write a plan first.",
     );
