@@ -409,7 +409,7 @@ export function Homepage({
           </p>
           <div className="mt-20 sm:mt-28">
             <h1
-              className="font-die-grotesk-b text-[clamp(2.875rem,14.2vw,5rem)] leading-[0.88] font-bold text-slate-950 dark:text-slate-50"
+              className="font-die-grotesk-b text-[clamp(2.875rem,14.2vw,5rem)] leading-[0.88] font-bold tracking-[-0.02em] text-slate-950 dark:text-slate-50"
               data-testid="homepage-heading"
             >
               Easier collaboration
@@ -624,12 +624,12 @@ function AgentChatMock({
 
   return (
     <div
-      className="homepage-workflow-terminal w-full overflow-hidden rounded-lg border border-slate-950/70 bg-[#1F232B] font-mono text-slate-50 shadow-[0_20px_48px_rgba(15,23,42,0.16)] max-[899px]:h-full max-[899px]:border-slate-950/60 dark:shadow-[0_18px_44px_rgba(0,0,0,0.35)]"
+      className="homepage-workflow-terminal w-full overflow-hidden rounded-xl border border-slate-950/70 bg-[#1F232B] font-mono text-slate-50 shadow-[0_20px_48px_rgba(15,23,42,0.16)] max-[899px]:h-full max-[899px]:border-slate-950/60 dark:shadow-[0_18px_44px_rgba(0,0,0,0.35)]"
       data-homepage-workflow-terminal-stage={workflowStage}
       data-testid="homepage-workflow-terminal"
       ref={terminalRef}
     >
-      <div className="flex min-h-10 items-center justify-between gap-4 border-b border-slate-400/20 px-3.5 text-xs font-bold text-slate-300 max-[899px]:min-h-8 max-[899px]:px-3 max-[899px]:text-[0.68rem]">
+      <div className="flex min-h-8 items-center justify-between gap-3 border-b border-slate-400/20 px-3 text-xs font-bold text-slate-300 max-[899px]:min-h-7 max-[899px]:px-2.5 max-[899px]:text-[0.68rem]">
         <div className="flex items-center gap-1.5" aria-hidden="true">
           <span className="inline-flex size-[0.65rem] rounded-full bg-rose-500" />
           <span className="inline-flex size-[0.65rem] rounded-full bg-amber-400" />
@@ -919,13 +919,13 @@ function RoughdraftPopupMock({ workflowStage }: { workflowStage: number }) {
   return (
     <div
       aria-hidden={visible ? undefined : true}
-      className="absolute right-[calc(-1*var(--homepage-workflow-popup-overhang))] bottom-4 left-[clamp(0.5rem,3vw,1.5rem)] z-[2] w-auto min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 shadow-[0_18px_44px_rgba(15,23,42,0.08)] transition-[opacity,transform] duration-200 [--homepage-workflow-popup-overhang:clamp(0rem,calc((100vw-72rem)*0.5),4rem)] data-[popup-visible=false]:translate-y-3 data-[popup-visible=false]:scale-[0.98] data-[popup-visible=false]:pointer-events-none data-[popup-visible=false]:opacity-0 data-[popup-visible=true]:translate-y-0 data-[popup-visible=true]:scale-100 data-[popup-visible=true]:opacity-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-50 dark:shadow-[0_18px_44px_rgba(0,0,0,0.28)] max-[899px]:right-2 max-[899px]:bottom-2 max-[899px]:left-2 max-[899px]:[--homepage-workflow-popup-overhang:0rem] max-[520px]:right-1.5 max-[520px]:bottom-1.5 max-[520px]:left-1.5"
+      className="homepage-workflow-popup absolute right-[calc(-1*var(--homepage-workflow-popup-overhang))] bottom-4 left-[clamp(0.5rem,3vw,1.5rem)] z-[2] w-auto min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-[0_18px_44px_rgba(15,23,42,0.08)] transition-[opacity,transform] duration-200 [--homepage-workflow-popup-overhang:clamp(0rem,calc((100vw-72rem)*0.5),4rem)] data-[popup-visible=false]:translate-y-3 data-[popup-visible=false]:scale-[0.98] data-[popup-visible=false]:pointer-events-none data-[popup-visible=false]:opacity-0 data-[popup-visible=true]:translate-y-0 data-[popup-visible=true]:scale-100 data-[popup-visible=true]:opacity-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-50 dark:shadow-[0_18px_44px_rgba(0,0,0,0.28)] max-[899px]:right-2 max-[899px]:bottom-2 max-[899px]:left-2 max-[899px]:[--homepage-workflow-popup-overhang:0rem] max-[520px]:right-1.5 max-[520px]:bottom-1.5 max-[520px]:left-1.5"
       data-homepage-workflow-popup=""
       data-popup-visible={visible ? "true" : "false"}
       data-testid="homepage-workflow-popup"
     >
       <div
-        className="flex h-10 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 text-xs font-bold text-stone-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-400 max-[520px]:px-3"
+        className="homepage-workflow-panel-header flex h-8 items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 text-xs font-bold text-stone-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-400 max-[520px]:px-2.5"
         data-testid="homepage-workflow-popup-header"
       >
         <div
