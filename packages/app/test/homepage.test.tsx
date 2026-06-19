@@ -356,6 +356,19 @@ describe("Homepage", () => {
       "Give this to your coding agent",
     );
     expect(document.body.textContent).toContain(AGENT_SETUP_PROMPT);
+    const dialogContent = document.body.querySelector(
+      '[data-slot="dialog-content"]',
+    );
+    const dialogOverlay = document.body.querySelector(
+      '[data-slot="dialog-overlay"]',
+    );
+    expect(dialogContent?.getAttribute("data-open")).toBe("");
+    expect(dialogContent?.className).toContain("data-open:animate-in");
+    expect(dialogContent?.className).toContain("data-open:fade-in-0");
+    expect(dialogContent?.className).toContain("data-open:zoom-in-95");
+    expect(dialogOverlay?.getAttribute("data-open")).toBe("");
+    expect(dialogOverlay?.className).toContain("data-open:animate-in");
+    expect(dialogOverlay?.className).toContain("data-open:fade-in-0");
 
     const copyButton = getByTestId<HTMLButtonElement>(
       document.body,
