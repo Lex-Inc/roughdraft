@@ -400,7 +400,7 @@ export function Homepage({
         </div>
       ) : null}
       <div className="w-full">
-        <div className="font-die-grotesk-a mx-auto max-w-[100rem] text-left">
+        <div className="font-die-grotesk-a mx-auto max-w-[1500px] text-left">
           <p
             className="text-[clamp(1.125rem,0.9rem+0.35vw,1.375rem)] font-bold text-stone-500 dark:text-stone-500"
             data-testid="homepage-logo"
@@ -416,7 +416,7 @@ export function Homepage({
               <br data-testid="homepage-heading-break" />
               with your agent
             </h1>
-            <p className="mt-5 max-w-5xl text-[clamp(1.25rem,0.9rem+1vw,1.75rem)] leading-none text-slate-950 dark:text-slate-50">
+            <p className="mt-7 max-w-5xl font-sans text-[clamp(1.125rem,0.85rem+0.8vw,1.5rem)] leading-none font-medium text-slate-950 dark:text-slate-50">
               {message}
             </p>
 
@@ -494,7 +494,7 @@ export function Homepage({
           </div>
         </div>
 
-        <div className="mt-10 w-screen max-w-none -translate-x-6 overflow-hidden border-y border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-[0_20px_60px_rgba(15,23,42,0.12)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.4)] min-[1000px]:mx-auto min-[1000px]:w-full min-[1000px]:max-w-[100rem] min-[1000px]:translate-x-0 min-[1000px]:rounded-lg min-[1000px]:border">
+        <div className="mt-10 w-screen max-w-none -translate-x-6 overflow-hidden border-y border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-[0_20px_60px_rgba(15,23,42,0.12)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.4)] min-[1000px]:mx-auto min-[1000px]:w-full min-[1000px]:max-w-[1500px] min-[1000px]:translate-x-0 min-[1000px]:rounded-lg min-[1000px]:border">
           <img
             data-testid="homepage-sneak-peek-image"
             src="/sneak-peek.png"

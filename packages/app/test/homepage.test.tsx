@@ -173,7 +173,7 @@ describe("Homepage", () => {
     expect(homepageHeading?.parentElement?.className).toContain("mt-20");
     expect(homepageHeading?.parentElement?.className).toContain("sm:mt-28");
     expect(homepageTextWrapper?.className).toContain("text-left");
-    expect(homepageTextWrapper?.className).toContain("max-w-[100rem]");
+    expect(homepageTextWrapper?.className).toContain("max-w-[1500px]");
     expect(homepageTextWrapper?.className).not.toContain("font-bold");
     expect(homepageHeading?.className).not.toContain("max-w-");
     expect(homepageHeading?.className).toContain("text-[clamp(");
@@ -183,10 +183,22 @@ describe("Homepage", () => {
     expect(homepageHeading?.className).toContain("leading-[0.88]");
     expect(homepageHeading?.className).not.toContain("text-balance");
     expect(homepageHeading?.nextElementSibling?.className).toContain(
-      "text-[clamp(",
+      "mt-7",
+    );
+    expect(homepageHeading?.nextElementSibling?.className).not.toContain(
+      "mt-5",
+    );
+    expect(homepageHeading?.nextElementSibling?.className).toContain(
+      "text-[clamp(1.125rem,0.85rem+0.8vw,1.5rem)]",
     );
     expect(homepageHeading?.nextElementSibling?.className).toContain(
       "leading-none",
+    );
+    expect(homepageHeading?.nextElementSibling?.className).toContain(
+      "font-sans",
+    );
+    expect(homepageHeading?.nextElementSibling?.className).toContain(
+      "font-medium",
     );
     expect(homepageHeading?.nextElementSibling?.className).toContain(
       "max-w-5xl",
@@ -297,7 +309,7 @@ describe("Homepage", () => {
     expect(
       getByTestId(container, "homepage-sneak-peek-image").parentElement
         ?.className,
-    ).toContain("max-w-[100rem]");
+    ).toContain("max-w-[1500px]");
     expect(document.body.textContent).not.toContain(AGENT_SETUP_PROMPT);
 
     const cta = getByTestId<HTMLButtonElement>(
