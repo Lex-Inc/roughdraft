@@ -588,7 +588,10 @@ function HomepageWorkflowScene({
         <h3 className="font-die-grotesk-b mt-5 text-[clamp(2rem,1.5rem+1.5vw,2.5rem)] leading-tight font-bold text-balance text-slate-950 dark:text-slate-50">
           {title}
         </h3>
-        <p className="mt-4 max-w-md font-sans text-[clamp(1rem,0.95rem+0.25vw,1.125rem)] leading-7 font-medium text-slate-950 dark:text-slate-50">
+        <p
+          className="mt-4 max-w-md font-sans text-[clamp(1rem,0.95rem+0.25vw,1.125rem)] leading-7 font-medium text-slate-950 dark:text-slate-50"
+          data-testid="homepage-workflow-scene-description"
+        >
           {description}
         </p>
       </div>

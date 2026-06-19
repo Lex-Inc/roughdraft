@@ -182,9 +182,7 @@ describe("Homepage", () => {
     );
     expect(homepageHeading?.className).toContain("leading-[0.88]");
     expect(homepageHeading?.className).not.toContain("text-balance");
-    expect(homepageHeading?.nextElementSibling?.className).toContain(
-      "mt-7",
-    );
+    expect(homepageHeading?.nextElementSibling?.className).toContain("mt-7");
     expect(homepageHeading?.nextElementSibling?.className).not.toContain(
       "mt-5",
     );
@@ -509,7 +507,10 @@ describe("Homepage", () => {
       expect(sceneNodes[index]?.textContent).toContain(scene);
     });
 
-    const firstSceneDescription = sceneNodes[0]?.querySelector("p");
+    const firstSceneDescription = getByTestId(
+      sceneNodes[0],
+      "homepage-workflow-scene-description",
+    );
     expect(firstSceneDescription?.textContent).toContain(
       "Start in the same agent chat you already use.",
     );
