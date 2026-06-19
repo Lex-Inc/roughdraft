@@ -20,6 +20,20 @@ npm i -g roughdraft
 
 If the user did not explicitly ask you to install software, ask before installing a global npm package.
 
+## First, Open a Test Document
+
+Create a short example document and open it for the user so they can confirm the full review loop works:
+
+```bash
+example_file="$HOME/roughdraft-example.md"
+curl -fsSL https://roughdraft.md/example.md -o "$example_file"
+roughdraft open "$example_file"
+```
+
+If `curl` is unavailable, create a short Markdown file yourself with a heading, one or two sentences, and an invitation for the user to leave a comment or question.
+
+After `roughdraft open` opens the document, leave the command running. Tell the user they can leave comments, suggested edits, or questions in the document, then click **Done Reviewing**. When Roughdraft exits, read the Markdown file, reply inline to any comments or questions using Roughdraft-flavored CriticMarkup, save the file, and open it in Roughdraft again so the user can continue the conversation in the document.
+
 ## Update Your Persistent Instructions
 
 Add Roughdraft guidance to the persistent instruction file this agent will actually load. Prefer global or user-level instructions, because Roughdraft is a cross-project workflow.
@@ -108,7 +122,7 @@ If Roughdraft is not running, `roughdraft open` will start it automatically.
 
 After `roughdraft open` opens the document, leave the command running. Do not interrupt, kill, background, detach, or treat the waiting process as cleanup. The wait is intentional: Roughdraft will exit the command after the user clicks Done Reviewing, and that exit is your signal to resume.
 
-After the user finishes reviewing in Roughdraft, read the Markdown file from disk and respond to any CriticMarkup comments or suggested changes.
+After the user finishes reviewing in Roughdraft, read the Markdown file from disk and respond to any CriticMarkup comments or suggested changes. If the user left questions or comments in the document, reply inline in the Markdown file using Roughdraft-flavored CriticMarkup, save it, and open the file in Roughdraft again so the user can continue reviewing.
 
 Use Roughdraft-flavored CriticMarkup when reading or writing inline review feedback in Markdown. The base markers are:
 
