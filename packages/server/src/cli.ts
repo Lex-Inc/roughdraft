@@ -2133,27 +2133,76 @@ async function runWatch(
     body.timeoutSeconds = options.timeoutSeconds;
   }
 
-  const response = await deps.fetchImpl(
-    new URL("/api/review-events/watch", serverUrl),
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      ...(options.timeoutSeconds !== undefined
-        ? { signal: AbortSignal.timeout((options.timeoutSeconds + 5) * 1000) }
-        : {}),
-    },
-  );
+  // Idle-timeout error codes from undici (Node's built-in fetch) that fire
+  // when the server holds a long-poll connection open longer than undici's
+  // default headersTimeout / bodyTimeout (~5 min). These are transient — the
+  // server is still alive and the session is still valid — so we re-poll
+  // instead of letting the unhandled rejection crash the CLI process.
+  const IDLE_TIMEOUT_CODES = new Set([
+    "UND_ERR_HEADERS_TIMEOUT",
+    "UND_ERR_BODY_TIMEOUT",
+    "UND_ERR_SOCKET",
+    "ECONNRESET",
+    "UND_ERR_CONNECT_TIMEOUT",
+  ]);
 
-  if (!response.ok) {
-    throw new Error(`Failed to watch review events: ${response.status}`);
-  }
+  const doWatch = async () => {
+    const response = await deps.fetchImpl(
+      new URL("/api/review-events/watch", serverUrl),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        ...(options.timeoutSeconds !== undefined
+          ? {
+              signal: AbortSignal.timeout((options.timeoutSeconds + 5) * 1000),
+            }
+          : {}),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to watch review events: ${response.status}`);
+    }
+    return response.json() as Promise<{
+      events?: unknown[];
+      timedOut?: boolean;
+      nextSequence?: number;
+    }>;
+  };
 
-  const payload = (await response.json()) as {
+  let payload: {
     events?: unknown[];
     timedOut?: boolean;
     nextSequence?: number;
   };
+
+  if (options.timeoutSeconds !== undefined) {
+    // Explicit timeout: a single attempt is correct; AbortSignal.timeout
+    // already guards the wall-clock budget.
+    payload = await doWatch();
+  } else {
+    // No explicit timeout (the normal `roughdraft open` flow): retry on idle
+    // timeout errors so that reviewers who leave the document open longer
+    // than undici's default idle timeout don't crash the CLI before they
+    // click "Done Reviewing".
+    for (;;) {
+      try {
+        payload = await doWatch();
+        break;
+      } catch (err) {
+        const code =
+          (err as { cause?: { code?: string }; code?: string })?.cause?.code ??
+          (err as { code?: string })?.code;
+        if (typeof code === "string" && IDLE_TIMEOUT_CODES.has(code)) {
+          // Replay from session start so a Done event fired during the
+          // reconnect window is not missed.
+          body.fromNow = false;
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
 
   if (json) {
     emitJson(deps.log, payload);
