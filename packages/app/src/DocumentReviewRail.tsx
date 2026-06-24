@@ -19,6 +19,7 @@ import type {
   CriticChangeAttrs,
   CriticChangeKind,
   CriticComment,
+  CriticReaction,
 } from "./critic-markup";
 import {
   buildCommentThreadRailItems,
@@ -61,6 +62,7 @@ interface DocumentReviewRailProps {
   onDeleteComment: (commentId: string) => void;
   onUpdateComment: (commentId: string, nextContent: string) => void;
   onReplyComment: (commentId: string) => void;
+  onReactComment: (commentId: string, reaction: CriticReaction | null) => void;
   onSelectComment: (commentId: string) => void;
   onFocusComment: (commentId: string) => void;
   onHoverComment: (commentId: string | null) => void;
@@ -197,6 +199,7 @@ export function DocumentReviewRail({
   onDeleteComment,
   onUpdateComment,
   onReplyComment,
+  onReactComment,
   onSelectComment,
   onFocusComment,
   onHoverComment,
@@ -478,6 +481,7 @@ export function DocumentReviewRail({
                   onDeleteComment={onDeleteComment}
                   onUpdateComment={onUpdateComment}
                   onReplyComment={onReplyComment}
+                  onReactComment={onReactComment}
                   onSelectComment={onSelectComment}
                   onFocusComment={onFocusComment}
                   onHoverComment={onHoverComment}

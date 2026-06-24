@@ -1,17 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { RfmReviewIndexSummary } from "@roughdraft/rfm";
 
 export interface ReviewCompletedEventInput {
   documentPath: string;
   projectPath: string;
   relativePath: string;
   version: string;
-  summary: {
-    comments: number;
-    replies: number;
-    suggestions: number;
-    unresolved: number;
-  };
+  summary: RfmReviewIndexSummary;
   overallComment?: string;
 }
 

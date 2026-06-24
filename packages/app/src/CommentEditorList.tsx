@@ -1,4 +1,15 @@
-import { Bot, Check, Pencil, Reply, Trash2, User, X } from "lucide-react";
+import {
+  Bot,
+  Check,
+  MessageCircleQuestion,
+  Pencil,
+  Reply,
+  ThumbsDown,
+  ThumbsUp,
+  Trash2,
+  User,
+  X,
+} from "lucide-react";
 import {
   type KeyboardEvent,
   type MouseEvent,
@@ -20,6 +31,7 @@ import {
   buildCommentThreads,
   type CriticComment,
   type CriticCommentThread,
+  type CriticReaction,
 } from "./critic-markup";
 import { cn } from "./lib/utils";
 
@@ -37,6 +49,7 @@ interface CommentEditorListProps {
   onHoverComment?: (commentId: string | null) => void;
   onFocusComment?: (commentId: string) => void;
   onReplyComment?: (commentId: string) => void;
+  onReactComment?: (commentId: string, reaction: CriticReaction | null) => void;
   pendingFocusCommentId?: string | null;
   newCommentDraftIds?: string[];
   onAutoFocusComment?: (commentId: string) => void;
@@ -104,6 +117,7 @@ export function CommentEditorList({
   onHoverComment,
   onFocusComment,
   onReplyComment,
+  onReactComment,
   pendingFocusCommentId = null,
   newCommentDraftIds = [],
   onAutoFocusComment,
@@ -296,6 +310,7 @@ export function CommentEditorList({
           onHoverComment={onHoverComment}
           onFocusComment={onFocusComment}
           onReplyComment={onReplyComment}
+          onReactComment={onReactComment}
           onStartEditingComment={startEditingComment}
           onSubmitEditingComment={submitEditingComment}
           onCancelEditingComment={cancelEditingComment}
@@ -334,6 +349,7 @@ interface CommentThreadNodeProps {
   onHoverComment?: (commentId: string | null) => void;
   onFocusComment?: (commentId: string) => void;
   onReplyComment?: (commentId: string) => void;
+  onReactComment?: (commentId: string, reaction: CriticReaction | null) => void;
   onStartEditingComment: (commentId: string) => void;
   onSubmitEditingComment: (commentId: string) => void;
   onCancelEditingComment: (commentId: string) => void;
@@ -428,6 +444,7 @@ function CommentThreadNode({
   onHoverComment,
   onFocusComment,
   onReplyComment,
+  onReactComment,
   onStartEditingComment,
   onSubmitEditingComment,
   onCancelEditingComment,
@@ -766,6 +783,64 @@ function CommentThreadNode({
                     onClick={action.onClick}
                   />
                 ))}
+                {!isEditing && onReactComment ? (
+                  <>
+                    <CommentActionButton
+                      label="Thumbs up"
+                      testId={`comment-${variant}-${comment.id}-reaction-up`}
+                      icon={<ThumbsUp className="size-3.5" />}
+                      compact
+                      className={
+                        comment.reaction === "up"
+                          ? "border-stone-300 bg-[#DED8CE]/45 text-stone-600 dark:border-slate-500 dark:bg-slate-700 dark:text-stone-300"
+                          : ""
+                      }
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onReactComment(
+                          comment.id,
+                          comment.reaction === "up" ? null : "up",
+                        );
+                      }}
+                    />
+                    <CommentActionButton
+                      label="Thumbs down"
+                      testId={`comment-${variant}-${comment.id}-reaction-down`}
+                      icon={<ThumbsDown className="size-3.5" />}
+                      compact
+                      className={
+                        comment.reaction === "down"
+                          ? "border-stone-300 bg-[#DED8CE]/45 text-stone-600 dark:border-slate-500 dark:bg-slate-700 dark:text-stone-300"
+                          : ""
+                      }
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onReactComment(
+                          comment.id,
+                          comment.reaction === "down" ? null : "down",
+                        );
+                      }}
+                    />
+                    <CommentActionButton
+                      label="Needs clarification"
+                      testId={`comment-${variant}-${comment.id}-reaction-clarify`}
+                      icon={<MessageCircleQuestion className="size-3.5" />}
+                      compact
+                      className={
+                        comment.reaction === "clarify"
+                          ? "border-stone-300 bg-[#DED8CE]/45 text-stone-600 dark:border-slate-500 dark:bg-slate-700 dark:text-stone-300"
+                          : ""
+                      }
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onReactComment(
+                          comment.id,
+                          comment.reaction === "clarify" ? null : "clarify",
+                        );
+                      }}
+                    />
+                  </>
+                ) : null}
               </div>
             </div>
           </div>
@@ -796,6 +871,7 @@ function CommentThreadNode({
               onHoverComment={onHoverComment}
               onFocusComment={onFocusComment}
               onReplyComment={onReplyComment}
+              onReactComment={onReactComment}
               onStartEditingComment={onStartEditingComment}
               onSubmitEditingComment={onSubmitEditingComment}
               onCancelEditingComment={onCancelEditingComment}

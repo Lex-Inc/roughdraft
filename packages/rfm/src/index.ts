@@ -27,6 +27,17 @@ export interface RfmValidationResult {
 
 export type RfmReviewItemKind = "comment" | "suggestion" | "reply";
 export type RfmSuggestionKind = "addition" | "deletion" | "substitution";
+export type RfmReaction = "up" | "down" | "clarify";
+
+export const RFM_REACTIONS: readonly RfmReaction[] = ["up", "down", "clarify"];
+
+export function normalizeRfmReaction(
+  value: string | null | undefined,
+): RfmReaction | null {
+  return RFM_REACTIONS.includes(value as RfmReaction)
+    ? (value as RfmReaction)
+    : null;
+}
 
 export interface RfmReviewItem {
   id: string;
@@ -36,6 +47,7 @@ export interface RfmReviewItem {
   author: string | null;
   createdAt: string | null;
   status: string | null;
+  reaction: RfmReaction | null;
   text: string;
   originalText?: string;
   replacementText?: string;
@@ -51,6 +63,7 @@ export interface RfmReviewIndexSummary {
   replies: number;
   suggestions: number;
   unresolved: number;
+  reactions: Record<RfmReaction, number>;
 }
 
 export interface RfmReviewIndex {
@@ -79,6 +92,11 @@ export interface AppendRoughdraftDocumentCommentOptions {
 export interface MarkRoughdraftResolvedOptions {
   targetId: string;
   summary?: string;
+}
+
+export interface SetRoughdraftReactionOptions {
+  targetId: string;
+  reaction: RfmReaction | null;
 }
 
 interface Metadata {
@@ -133,6 +151,7 @@ interface YamlMetadataEntry {
   re?: string;
   status?: string;
   resolved?: string;
+  reaction?: string;
   [key: string]: unknown;
 }
 
@@ -467,6 +486,7 @@ export function extractRoughdraftReviewIndex(markdown: string): RfmReviewIndex {
       author: attrs.get("by") ?? null,
       createdAt: attrs.get("at") ?? null,
       status: attrs.get("status") ?? null,
+      reaction: normalizeRfmReaction(attrs.get("reaction")),
       text: parsed.content,
       anchorText,
       offset: parsed.offset,
@@ -491,6 +511,7 @@ export function extractRoughdraftReviewIndex(markdown: string): RfmReviewIndex {
       author: attrs.get("by") ?? null,
       createdAt: attrs.get("at") ?? null,
       status: attrs.get("status") ?? null,
+      reaction: null,
       text: parsed.text,
       originalText: parsed.originalText,
       replacementText: parsed.replacementText,
@@ -576,6 +597,9 @@ export function extractRoughdraftReviewIndex(markdown: string): RfmReviewIndex {
       author: typeof entry.by === "string" ? entry.by : null,
       createdAt: typeof entry.at === "string" ? entry.at : null,
       status: typeof entry.status === "string" ? entry.status : null,
+      reaction: normalizeRfmReaction(
+        typeof entry.reaction === "string" ? entry.reaction : null,
+      ),
       text: String(entry.body),
       offset: endmatter.offset ?? markdown.length,
       endOffset: endmatter.offset ?? markdown.length,
@@ -593,6 +617,15 @@ export function extractRoughdraftReviewIndex(markdown: string): RfmReviewIndex {
       replies: items.filter((item) => item.kind === "reply").length,
       suggestions: items.filter((item) => item.kind === "suggestion").length,
       unresolved: items.filter((item) => item.status !== "resolved").length,
+      reactions: RFM_REACTIONS.reduce(
+        (counts, reaction) => {
+          counts[reaction] = items.filter(
+            (item) => item.reaction === reaction,
+          ).length;
+          return counts;
+        },
+        { up: 0, down: 0, clarify: 0 } as Record<RfmReaction, number>,
+      ),
     },
   };
 }
@@ -711,6 +744,62 @@ export function markRoughdraftResolved(
   metadata.attrs.set("status", "resolved");
   if (options.summary) {
     metadata.attrs.set("resolved", options.summary);
+  }
+
+  return `${markdown.slice(0, metadata.offset)}${serializeMetadataAttributes(
+    Object.fromEntries(metadata.attrs),
+  )}${markdown.slice(metadata.endOffset)}`;
+}
+
+export function setRoughdraftReaction(
+  markdown: string,
+  options: SetRoughdraftReactionOptions,
+): string {
+  if (options.reaction !== null && !RFM_REACTIONS.includes(options.reaction)) {
+    throw new Error(`Unknown reaction: ${String(options.reaction)}`);
+  }
+
+  const index = extractRoughdraftReviewIndex(markdown);
+  const target = index.items.find((item) => item.id === options.targetId);
+  if (!target) {
+    throw new Error(`Review item not found: ${options.targetId}`);
+  }
+  if (target.kind === "suggestion") {
+    throw new Error(
+      `Reactions are only supported on comments: ${options.targetId}`,
+    );
+  }
+
+  const endmatter = parseRoughdraftEndmatter(markdown);
+  if (endmatter.comments.has(options.targetId)) {
+    const comments = new Map(endmatter.comments);
+    const suggestions = new Map(endmatter.suggestions);
+    const current = { ...(comments.get(options.targetId) ?? {}) };
+    if (options.reaction === null) {
+      delete current.reaction;
+    } else {
+      current.reaction = options.reaction;
+    }
+    comments.set(options.targetId, current);
+    return writeRoughdraftEndmatter(markdown, { comments, suggestions });
+  }
+
+  const metadataStart = findCanonicalMetadataStart(markdown, target.endOffset);
+  if (metadataStart === null) {
+    throw new Error(
+      `Review item has no canonical metadata: ${options.targetId}`,
+    );
+  }
+
+  const metadata = parseCanonicalMetadata(markdown, metadataStart);
+  if (!metadata) {
+    throw new Error(`Review item has invalid metadata: ${options.targetId}`);
+  }
+
+  if (options.reaction === null) {
+    metadata.attrs.delete("reaction");
+  } else {
+    metadata.attrs.set("reaction", options.reaction);
   }
 
   return `${markdown.slice(0, metadata.offset)}${serializeMetadataAttributes(
@@ -1360,4 +1449,5 @@ function findCanonicalMetadataStart(
 function isValidDateTime(value: string): boolean {
   return dateTimePattern.test(value) && !Number.isNaN(Date.parse(value));
 }
+
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";

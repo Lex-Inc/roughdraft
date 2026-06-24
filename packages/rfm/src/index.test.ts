@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  appendRoughdraftReply,
   appendRoughdraftDocumentComment,
+  appendRoughdraftReply,
   extractRoughdraftReviewIndex,
   markRoughdraftResolved,
+  setRoughdraftReaction,
   validateRoughdraftMarkdown,
 } from "./index";
 
@@ -615,5 +616,131 @@ describe("RFM mutation helpers", () => {
       id: "s1",
       status: "resolved",
     });
+  });
+});
+
+describe("comment reactions", () => {
+  it("extracts an inline comment reaction", () => {
+    const markdown =
+      'Keep {>>open question<<}{id="c1" by="user" at="2026-04-28T12:06:00.000Z" reaction="up"}.\n';
+
+    const comment = extractRoughdraftReviewIndex(markdown).items.find(
+      (item) => item.id === "c1",
+    );
+
+    expect(comment?.reaction).toBe("up");
+  });
+
+  it("extracts an endmatter-backed comment reaction", () => {
+    const markdown = [
+      "Keep {>>open question<<}{#c1}.",
+      "",
+      "---",
+      "comments:",
+      "  c1:",
+      "    by: user",
+      '    at: "2026-04-28T12:06:00.000Z"',
+      "    reaction: clarify",
+      "",
+    ].join("\n");
+
+    const comment = extractRoughdraftReviewIndex(markdown).items.find(
+      (item) => item.id === "c1",
+    );
+
+    expect(comment?.reaction).toBe("clarify");
+  });
+
+  it("defaults reaction to null when absent and ignores invalid values", () => {
+    const markdown =
+      'Keep {>>q1<<}{id="c1" by="user" at="2026-04-28T12:06:00.000Z"} and {>>q2<<}{id="c2" by="user" at="2026-04-28T12:07:00.000Z" reaction="meh"}.\n';
+
+    const index = extractRoughdraftReviewIndex(markdown);
+    expect(index.items.find((item) => item.id === "c1")?.reaction).toBeNull();
+    expect(index.items.find((item) => item.id === "c2")?.reaction).toBeNull();
+  });
+
+  it("tallies reactions in the review index summary", () => {
+    const markdown =
+      'Keep {>>q1<<}{id="c1" by="user" at="2026-04-28T12:06:00.000Z" reaction="up"} and {>>q2<<}{id="c2" by="user" at="2026-04-28T12:07:00.000Z" reaction="up"} and {>>q3<<}{id="c3" by="user" at="2026-04-28T12:08:00.000Z" reaction="clarify"} and {>>q4<<}{id="c4" by="user" at="2026-04-28T12:09:00.000Z"}.\n';
+
+    expect(extractRoughdraftReviewIndex(markdown).summary.reactions).toEqual({
+      up: 2,
+      down: 0,
+      clarify: 1,
+    });
+  });
+
+  it("sets a reaction on an inline comment without changing unrelated markup", () => {
+    const markdown =
+      'Add {++one example++}{id="s1" by="AI" at="2026-04-28T12:05:00.000Z"} and keep {>>open question<<}{id="c1" by="user" at="2026-04-28T12:06:00.000Z"}.\n';
+
+    const updated = setRoughdraftReaction(markdown, {
+      targetId: "c1",
+      reaction: "down",
+    });
+
+    expect(updated).toBe(
+      'Add {++one example++}{id="s1" by="AI" at="2026-04-28T12:05:00.000Z"} and keep {>>open question<<}{id="c1" by="user" at="2026-04-28T12:06:00.000Z" reaction="down"}.\n',
+    );
+  });
+
+  it("sets a reaction on an endmatter-backed comment in YAML", () => {
+    const markdown = [
+      "Keep {>>open question<<}{#c1}.",
+      "",
+      "---",
+      "comments:",
+      "  c1:",
+      "    by: user",
+      '    at: "2026-04-28T12:06:00.000Z"',
+      "",
+    ].join("\n");
+
+    const updated = setRoughdraftReaction(markdown, {
+      targetId: "c1",
+      reaction: "up",
+    });
+
+    expect(updated).toContain("reaction: up");
+    expect(extractRoughdraftReviewIndex(updated).items[0]).toMatchObject({
+      id: "c1",
+      reaction: "up",
+    });
+  });
+
+  it("clears a reaction when passed null", () => {
+    const markdown =
+      'Keep {>>open question<<}{id="c1" by="user" at="2026-04-28T12:06:00.000Z" reaction="up"}.\n';
+
+    const updated = setRoughdraftReaction(markdown, {
+      targetId: "c1",
+      reaction: null,
+    });
+
+    expect(updated).not.toContain("reaction=");
+    expect(extractRoughdraftReviewIndex(updated).items[0]?.reaction).toBeNull();
+  });
+
+  it("rejects reactions on suggestions", () => {
+    const markdown =
+      'Add {++one example++}{id="s1" by="AI" at="2026-04-28T12:05:00.000Z"}.\n';
+
+    expect(() =>
+      setRoughdraftReaction(markdown, { targetId: "s1", reaction: "up" }),
+    ).toThrow();
+  });
+
+  it("rejects an unknown reaction value", () => {
+    const markdown =
+      'Keep {>>open question<<}{id="c1" by="user" at="2026-04-28T12:06:00.000Z"}.\n';
+
+    expect(() =>
+      setRoughdraftReaction(markdown, {
+        targetId: "c1",
+        // @ts-expect-error invalid reaction
+        reaction: "love",
+      }),
+    ).toThrow();
   });
 });

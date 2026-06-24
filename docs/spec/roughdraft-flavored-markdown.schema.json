@@ -112,6 +112,9 @@
         "resolved": {
           "type": "string"
         },
+        "reaction": {
+          "enum": ["up", "down", "clarify"]
+        },
         "metadata": {
           "$ref": "#/$defs/metadata"
         }

@@ -25,6 +25,22 @@ import {
   type MarkdownOptions,
 } from "../markdown";
 
+export type CriticReaction = "up" | "down" | "clarify";
+
+export const CRITIC_REACTIONS: readonly CriticReaction[] = [
+  "up",
+  "down",
+  "clarify",
+];
+
+export function normalizeCriticReaction(
+  value: string | null | undefined,
+): CriticReaction | null {
+  return CRITIC_REACTIONS.includes(value as CriticReaction)
+    ? (value as CriticReaction)
+    : null;
+}
+
 export interface CriticComment {
   id: string;
   content: string;
@@ -33,6 +49,7 @@ export interface CriticComment {
   authorId?: string | null;
   parentCommentId?: string | null;
   scope?: "document";
+  reaction?: CriticReaction | null;
 }
 
 export interface CriticCommentThread {
@@ -115,6 +132,7 @@ function parseLegacyMetadata(
     authorType: author.toUpperCase() === "AI" ? "ai" : "user",
     authorId: author.toUpperCase() === "AI" ? null : author,
     parentCommentId: fields.get("re") ?? null,
+    reaction: normalizeCriticReaction(fields.get("reaction")),
   };
 }
 
@@ -148,6 +166,7 @@ function parseAttributeMetadata(
     authorType: author.toUpperCase() === "AI" ? "ai" : "user",
     authorId: author.toUpperCase() === "AI" ? null : author,
     parentCommentId: fields.get("re") ?? null,
+    reaction: normalizeCriticReaction(fields.get("reaction")),
   };
 }
 
@@ -167,6 +186,9 @@ function commentPartialFromEndmatterEntry(
     authorId: author.toUpperCase() === "AI" ? null : author,
     parentCommentId:
       includeParent && typeof entry?.re === "string" ? entry.re : null,
+    reaction: normalizeCriticReaction(
+      typeof entry?.reaction === "string" ? entry.reaction : null,
+    ),
   };
 }
 
@@ -205,6 +227,10 @@ function serializeMetadata(comment: CriticComment): string {
 
   if (comment.parentCommentId) {
     fields.push(["re", comment.parentCommentId]);
+  }
+
+  if (comment.reaction) {
+    fields.push(["reaction", comment.reaction]);
   }
 
   return `{${fields
@@ -339,6 +365,12 @@ function endmatterEntryForComment(
     delete next.re;
   }
 
+  if (comment.reaction) {
+    next.reaction = comment.reaction;
+  } else {
+    delete next.reaction;
+  }
+
   return next;
 }
 
@@ -454,6 +486,7 @@ function createCommentWithContext(
     authorId: partial?.authorId ?? (authorType === "ai" ? null : "user"),
     parentCommentId: partial?.parentCommentId ?? null,
     scope: partial?.scope,
+    reaction: partial?.reaction ?? null,
   };
 }
 

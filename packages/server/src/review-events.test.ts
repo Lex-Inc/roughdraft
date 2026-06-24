@@ -13,6 +13,7 @@ function eventInput(documentPath = "/tmp/project/draft.md") {
       replies: 0,
       suggestions: 1,
       unresolved: 2,
+      reactions: { up: 0, down: 0, clarify: 0 },
     },
   };
 }

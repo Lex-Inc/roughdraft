@@ -213,6 +213,7 @@ Known metadata attributes:
 | `re` | Comments | No | Parent comment or suggestion id for threaded replies. |
 | `status` | Comments and suggestions | No | Review state. Roughdraft currently writes `resolved` when an item has been addressed. |
 | `resolved` | Comments and suggestions | No | Optional short resolution summary for an item whose `status` is `resolved`. |
+| `reaction` | Comments | No | Reviewer reaction to a comment. One of `up`, `down`, or `clarify`. Applies to comments and replies only, never to suggestions (which carry Accept/Reject semantics instead). Readers MUST ignore an unknown reaction value rather than reject the document. |
 
 Example:
 
@@ -224,7 +225,10 @@ comments:
   c1:
     by: user
     at: "2026-04-28T12:00:00.000Z"
+    reaction: up
 ```
+
+The inline equivalent is `{>>Needs a source.<<}{id="c1" by="user" at="2026-04-28T12:00:00.000Z" reaction="up"}`.
 
 Implementations SHOULD generate simple document-local ids. Roughdraft uses `c1`, `c2`, and so on for comments and `s1`, `s2`, and so on for suggestions. Implementations MUST preserve unknown valid attributes or YAML keys when possible, but they MUST NOT require unknown metadata for correct review rendering.
 

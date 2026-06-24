@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CommentEditorList } from "./CommentEditorList";
-import type { CriticComment } from "./critic-markup";
+import type { CriticComment, CriticReaction } from "./critic-markup";
 import {
   buildCommentThreadRailItems,
   type CommentGroupAnchor,
@@ -22,6 +22,7 @@ interface DocumentCommentRailProps {
   onDeleteComment: (commentId: string) => void;
   onUpdateComment: (commentId: string, nextContent: string) => void;
   onReplyComment: (commentId: string) => void;
+  onReactComment: (commentId: string, reaction: CriticReaction | null) => void;
   onSelectComment: (commentId: string) => void;
   onFocusComment: (commentId: string) => void;
   onHoverComment: (commentId: string | null) => void;
@@ -39,6 +40,7 @@ export function DocumentCommentRail({
   onDeleteComment,
   onUpdateComment,
   onReplyComment,
+  onReactComment,
   onSelectComment,
   onFocusComment,
   onHoverComment,
@@ -214,6 +216,7 @@ export function DocumentCommentRail({
                 onDeleteComment={onDeleteComment}
                 onUpdateComment={onUpdateComment}
                 onReplyComment={onReplyComment}
+                onReactComment={onReactComment}
                 onSelectComment={onSelectComment}
                 onFocusComment={onFocusComment}
                 onHoverComment={onHoverComment}
