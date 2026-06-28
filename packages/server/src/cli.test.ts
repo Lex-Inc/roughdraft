@@ -11,6 +11,7 @@ import {
   ensureServerRunning,
   getServerStateFilePath,
   runCli,
+  WATCH_POLL_SECONDS,
 } from "./cli";
 import { createApp } from "./index";
 import { ROUGHDRAFT_DEFAULT_PORT } from "./network";
@@ -1021,6 +1022,73 @@ describe("cli", () => {
     });
   });
 
+  it("re-polls with bounded timeouts and afterSequence threading until an event arrives", async () => {
+    const test = createTestDependencies();
+    const documentPath = path.join(projectDir, "draft.md");
+    fs.writeFileSync(documentPath, "# Draft\n");
+
+    const watchBodies: Array<Record<string, unknown>> = [];
+    const watchResponses = [
+      { events: [], timedOut: true, nextSequence: 5 },
+      {
+        events: [{ documentPath, type: "review.completed", sequence: 5 }],
+        timedOut: false,
+        nextSequence: 6,
+      },
+    ];
+    const deps = {
+      ...test.deps,
+      fetchImpl: (async (
+        input: Parameters<typeof fetch>[0],
+        init?: Parameters<typeof fetch>[1],
+      ) => {
+        const url =
+          input instanceof URL
+            ? input
+            : new URL(
+                typeof input === "string" ? input : input.url,
+                "http://localhost",
+              );
+        if (url.pathname === "/api/review-events/watch") {
+          watchBodies.push(
+            JSON.parse(String(init?.body)) as Record<string, unknown>,
+          );
+          const payload =
+            watchResponses[
+              Math.min(watchBodies.length, watchResponses.length) - 1
+            ];
+          return new Response(JSON.stringify(payload), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return test.deps.fetchImpl(input, init);
+      }) as typeof fetch,
+    };
+
+    const exitCode = await runCli(["watch", documentPath, "--json"], deps);
+
+    expect(exitCode).toBe(0);
+    expect(watchBodies).toHaveLength(2);
+    expect(watchBodies[0]).toMatchObject({
+      fromNow: true,
+      timeoutSeconds: WATCH_POLL_SECONDS,
+    });
+    expect(watchBodies[0]).not.toHaveProperty("afterSequence");
+    expect(watchBodies[1]).toMatchObject({
+      fromNow: false,
+      afterSequence: 4,
+      timeoutSeconds: WATCH_POLL_SECONDS,
+    });
+
+    const payload = parseOnlyJsonLog<{
+      timedOut: boolean;
+      events: Array<{ documentPath: string; type: string }>;
+    }>(test.logs);
+    expect(payload.timedOut).toBe(false);
+    expect(payload.events).toHaveLength(1);
+  });
+
   it("opens a document and waits for the next review event by default from open --json", async () => {
     const test = createTestDependencies();
     const documentPath = path.join(projectDir, "draft.md");
@@ -1076,8 +1144,8 @@ describe("cli", () => {
     }
     expect(watchRequestBody).toMatchObject({
       batchWindowSeconds: 0,
+      timeoutSeconds: WATCH_POLL_SECONDS,
     });
-    expect(watchRequestBody).not.toHaveProperty("timeoutSeconds");
     await fetch(`http://localhost:${persisted?.port}/api/review-events`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

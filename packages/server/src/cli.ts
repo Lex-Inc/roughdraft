@@ -28,6 +28,11 @@ const SERVER_WAIT_ATTEMPTS = 40;
 const SERVER_WAIT_DELAY_MS = 150;
 const PROCESS_WAIT_ATTEMPTS = 20;
 const PROCESS_WAIT_DELAY_MS = 150;
+// Upper bound for a single watch long-poll. Node's fetch (undici) aborts any
+// request whose response headers have not arrived within 300 seconds, and the
+// watch endpoint sends no headers until an event fires, so each poll must stay
+// safely under that limit. The server clamps waits to 300 seconds as well.
+export const WATCH_POLL_SECONDS = 240;
 const USAGE_ERROR = 2;
 const KNOWN_COMMANDS = [
   "open",
@@ -2117,57 +2122,92 @@ async function runWatch(
     serverUrl = result.server.url;
   }
   const relativePath = path.relative(target.projectDir, target.openPath);
-  const body: {
-    projectPath: string;
-    path: string;
-    timeoutSeconds?: number;
-    batchWindowSeconds: number;
-    fromNow: boolean;
-  } = {
-    projectPath: target.projectDir,
-    path: relativePath,
-    batchWindowSeconds: options.batchWindowSeconds,
-    fromNow: !options.replay,
-  };
-  if (options.timeoutSeconds !== undefined) {
-    body.timeoutSeconds = options.timeoutSeconds;
+  const deadline =
+    options.timeoutSeconds !== undefined
+      ? Date.now() + options.timeoutSeconds * 1000
+      : undefined;
+
+  // The watch endpoint holds the request open without sending response headers
+  // until an event fires, and undici aborts any request whose headers have not
+  // arrived within 300 seconds (UND_ERR_HEADERS_TIMEOUT). Issue a series of
+  // bounded polls instead of one unbounded request, threading afterSequence
+  // between polls so an event emitted in the gap between two polls is still
+  // delivered from the server's retained event queue.
+  let fromNow = !options.replay;
+  let afterSequence: number | undefined;
+
+  while (true) {
+    const remainingSeconds =
+      deadline !== undefined
+        ? Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+        : undefined;
+    const pollSeconds =
+      remainingSeconds !== undefined
+        ? Math.min(WATCH_POLL_SECONDS, remainingSeconds)
+        : WATCH_POLL_SECONDS;
+    const body: {
+      projectPath: string;
+      path: string;
+      timeoutSeconds: number;
+      batchWindowSeconds: number;
+      fromNow: boolean;
+      afterSequence?: number;
+    } = {
+      projectPath: target.projectDir,
+      path: relativePath,
+      timeoutSeconds: pollSeconds,
+      batchWindowSeconds: options.batchWindowSeconds,
+      fromNow,
+    };
+    if (!fromNow && afterSequence !== undefined) {
+      body.afterSequence = afterSequence;
+    }
+
+    const response = await deps.fetchImpl(
+      new URL("/api/review-events/watch", serverUrl),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout((pollSeconds + 5) * 1000),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to watch review events: ${response.status}`);
+    }
+
+    const payload = (await response.json()) as {
+      events?: unknown[];
+      timedOut?: boolean;
+      nextSequence?: number;
+    };
+
+    if (typeof payload.nextSequence === "number") {
+      fromNow = false;
+      afterSequence = Math.max(0, payload.nextSequence - 1);
+    }
+
+    const reachedDeadline =
+      remainingSeconds !== undefined && remainingSeconds <= pollSeconds;
+    if (payload.timedOut && !reachedDeadline) {
+      continue;
+    }
+
+    if (json) {
+      emitJson(deps.log, payload);
+      return payload.timedOut ? 1 : 0;
+    }
+
+    if (payload.timedOut) {
+      deps.log(`No review completed event received for ${target.openPath}.`);
+      return 1;
+    }
+
+    deps.log(`Review completed for ${target.openPath}.`);
+    deps.log(`Received ${(payload.events ?? []).length} event(s).`);
+    return 0;
   }
-
-  const response = await deps.fetchImpl(
-    new URL("/api/review-events/watch", serverUrl),
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      ...(options.timeoutSeconds !== undefined
-        ? { signal: AbortSignal.timeout((options.timeoutSeconds + 5) * 1000) }
-        : {}),
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(`Failed to watch review events: ${response.status}`);
-  }
-
-  const payload = (await response.json()) as {
-    events?: unknown[];
-    timedOut?: boolean;
-    nextSequence?: number;
-  };
-
-  if (json) {
-    emitJson(deps.log, payload);
-    return payload.timedOut ? 1 : 0;
-  }
-
-  if (payload.timedOut) {
-    deps.log(`No review completed event received for ${target.openPath}.`);
-    return 1;
-  }
-
-  deps.log(`Review completed for ${target.openPath}.`);
-  deps.log(`Received ${(payload.events ?? []).length} event(s).`);
-  return 0;
 }
 
 function isMarkdownPath(targetPath: string): boolean {
