@@ -1078,6 +1078,13 @@ describe("Markdown rich-text round-trip regressions", () => {
     expect(richTextRoundTrip(input)).toBe(input);
   });
 
+  it("preserves single tilde approximation text", () => {
+    const input =
+      "Tracked ~57% of work time (~100h), with ~16 posts after ~£300k of finance work.\n";
+
+    expect(richTextRoundTrip(input)).toBe(input);
+  });
+
   it("preserves inline link titles", () => {
     const input = '[Roughdraft](./README.md "Local title")\n';
 
