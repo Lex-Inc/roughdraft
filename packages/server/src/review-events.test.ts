@@ -110,6 +110,25 @@ describe("ReviewEventQueue", () => {
     vi.useRealTimers();
   });
 
+  it("allows requested timeouts up to thirty minutes", async () => {
+    vi.useFakeTimers();
+    const queue = new ReviewEventQueue();
+    const waiting = queue.wait({
+      documentPath: "/tmp/project/draft.md",
+      timeoutMs: 1_900_000,
+    });
+
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect(queue.waiterCount()).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(1_500_000);
+    await expect(waiting).resolves.toMatchObject({
+      timedOut: true,
+      events: [],
+    });
+    vi.useRealTimers();
+  });
+
   it("ignores unrelated document paths", async () => {
     vi.useFakeTimers();
     const queue = new ReviewEventQueue();
