@@ -42,6 +42,7 @@ interface Waiter {
 }
 
 const DEFAULT_BATCH_WINDOW_MS = 250;
+const MAX_TIMEOUT_MS = 30 * 60 * 1000;
 const MAX_RETAINED_EVENTS = 100;
 
 type NormalizedWaitOptions = Required<
@@ -183,7 +184,7 @@ function normalizeWaitOptions(
     afterSequence: Math.max(0, options.afterSequence ?? 0),
     timeoutMs:
       options.timeoutMs !== undefined
-        ? clamp(options.timeoutMs, 0, 300_000)
+        ? clamp(options.timeoutMs, 0, MAX_TIMEOUT_MS)
         : undefined,
     batchWindowMs: clamp(
       options.batchWindowMs ?? DEFAULT_BATCH_WINDOW_MS,
