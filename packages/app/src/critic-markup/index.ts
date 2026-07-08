@@ -17,6 +17,7 @@ import {
 import {
   createMarkedRenderer,
   createTurndownService,
+  markedTokenizer,
   normalizeBlockSpacing,
   appendYamlEndmatter,
   prependYamlFrontmatter,
@@ -1262,6 +1263,7 @@ function createCriticMarked(
   });
 
   parser.use({
+    tokenizer: markedTokenizer,
     extensions: [
       {
         name: "criticCommentAnchor",

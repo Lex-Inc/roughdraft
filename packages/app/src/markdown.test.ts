@@ -97,6 +97,17 @@ describe("toHtml", () => {
     );
   });
 
+  it("does not treat single tildes as strikethrough", () => {
+    const html = toHtml(
+      "Tracked ~57% of work time (~100h), with ~16 posts.\n\nKeep ~~removed~~ text.",
+    );
+
+    expect(html).toContain(
+      "<p>Tracked ~57% of work time (~100h), with ~16 posts.</p>",
+    );
+    expect(html).toContain("<p>Keep <del>removed</del> text.</p>");
+  });
+
   it("round-trips headerless HTML tables to valid GFM table markdown", () => {
     expect(toMarkdown(toHtml(readMarkdownFixture("headerless-table.md")))).toBe(
       [
