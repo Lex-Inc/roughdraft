@@ -77,6 +77,7 @@ const attributeMetadataBlockPattern =
 const metadataAttributePattern =
   /([A-Za-z][A-Za-z0-9_-]*)="((?:\\[\s\S]|[^"\\])*)"/g;
 const metadataReferencePattern = /^\{#([A-Za-z][A-Za-z0-9_-]*)\}$/;
+const multilineCommentBodyPattern = /\r?\n[ \t]*\r?\n/;
 const unanchoredCommentSentinel = "\u2060";
 
 interface ParsedEndmatter {
@@ -126,19 +127,28 @@ function escapeMetadataAttributeValue(value: string): string {
   return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 }
 
-function parseAttributeMetadata(
+function parseMetadataAttributeFields(
   metadataText?: string,
-): Partial<Omit<CriticComment, "content">> {
+): Map<string, string> {
+  const fields = new Map<string, string>();
+
   if (!metadataText?.startsWith("{") || !metadataText.endsWith("}")) {
-    return {};
+    return fields;
   }
 
-  const fields = new Map<string, string>();
   const content = metadataText.slice(1, -1);
 
   for (const match of content.matchAll(metadataAttributePattern)) {
     fields.set(match[1], unescapeMetadataAttributeValue(match[2]));
   }
+
+  return fields;
+}
+
+function parseAttributeMetadata(
+  metadataText?: string,
+): Partial<Omit<CriticComment, "content">> {
+  const fields = parseMetadataAttributeFields(metadataText);
 
   const author = fields.get("by") ?? "user";
 
@@ -194,6 +204,18 @@ function parseMetadata(
   }
 
   return parseLegacyMetadata(legacyMetadataText);
+}
+
+function commentContentFromMarker(
+  commentText: string,
+  referenceMetadataText?: string,
+  endmatter?: ParsedEndmatter,
+): string {
+  const reference = referenceMetadataText?.match(metadataReferencePattern);
+  if (!reference || commentText.length > 0) return commentText;
+
+  const body = endmatter?.comments.get(reference[1] ?? "")?.body;
+  return typeof body === "string" ? body : commentText;
 }
 
 function serializeMetadata(comment: CriticComment): string {
@@ -288,6 +310,192 @@ function addEndmatterFeedback(
   }
 }
 
+function cloneParsedEndmatter(endmatter: ParsedEndmatter): ParsedEndmatter {
+  return {
+    comments: new Map(
+      [...endmatter.comments].map(([id, entry]) => [id, { ...entry }]),
+    ),
+    suggestions: new Map(
+      [...endmatter.suggestions].map(([id, entry]) => [id, { ...entry }]),
+    ),
+    data: endmatter.data ? { ...endmatter.data } : null,
+  };
+}
+
+function parsedEndmatterToYaml(endmatter: ParsedEndmatter): string | null {
+  const data: Record<string, unknown> = endmatter.data
+    ? { ...endmatter.data }
+    : {};
+
+  if (endmatter.comments.size > 0) {
+    data.comments = Object.fromEntries(endmatter.comments);
+  } else {
+    delete data.comments;
+  }
+
+  if (endmatter.suggestions.size > 0) {
+    data.suggestions = Object.fromEntries(endmatter.suggestions);
+  } else {
+    delete data.suggestions;
+  }
+
+  if (Object.keys(data).length === 0) return null;
+
+  return `---\n${stringifyYaml(data).trimEnd()}\n`;
+}
+
+function collectPatternRanges(markdown: string, pattern: RegExp) {
+  const ranges: Array<{ start: number; end: number }> = [];
+
+  for (const match of markdown.matchAll(pattern)) {
+    if (match.index === undefined) continue;
+    ranges.push({ start: match.index, end: match.index + match[0].length });
+  }
+
+  return ranges;
+}
+
+function collectInlineCodeRanges(markdown: string) {
+  const ranges: Array<{ start: number; end: number }> = [];
+
+  for (const match of markdown.matchAll(/(`+)([\s\S]*?)\1/g)) {
+    if (match.index === undefined) continue;
+    ranges.push({ start: match.index, end: match.index + match[0].length });
+  }
+
+  return ranges;
+}
+
+function collectLiteralMarkdownRanges(markdown: string) {
+  return [
+    ...collectPatternRanges(
+      markdown,
+      /^[ \t]*<details\b[\s\S]*?<\/details>[ \t]*(?:\r?\n|$)/gim,
+    ),
+    ...collectPatternRanges(
+      markdown,
+      /^[ \t]*<!--[\s\S]*?-->[ \t]*(?:\r?\n|$)/gm,
+    ),
+    ...collectInlineCodeRanges(markdown),
+  ].sort((left, right) => left.start - right.start || left.end - right.end);
+}
+
+function findContainingRange(
+  ranges: Array<{ start: number; end: number }>,
+  offset: number,
+) {
+  return ranges.find((range) => range.start <= offset && offset < range.end);
+}
+
+function normalizeLegacyMultilineComments(
+  body: string,
+  parsedEndmatter: ParsedEndmatter,
+): {
+  body: string;
+  parsedEndmatter: ParsedEndmatter;
+  endmatter: string | null;
+} {
+  let cursor = 0;
+  let normalized = "";
+  let nextEndmatter = parsedEndmatter;
+  let changed = false;
+  const literalRanges = collectLiteralMarkdownRanges(body);
+
+  while (cursor < body.length) {
+    const anchorOffset = body.indexOf("{==", cursor);
+
+    if (anchorOffset === -1) {
+      normalized += body.slice(cursor);
+      break;
+    }
+
+    const literalRange = findContainingRange(literalRanges, anchorOffset);
+    if (literalRange) {
+      normalized += body.slice(cursor, literalRange.end);
+      cursor = literalRange.end;
+      continue;
+    }
+
+    const anchorClose = body.indexOf("==}", anchorOffset + 3);
+
+    if (anchorClose === -1) {
+      normalized += body.slice(cursor);
+      break;
+    }
+
+    normalized += body.slice(cursor, anchorOffset);
+    normalized += body.slice(anchorOffset, anchorClose + 3);
+
+    let nextOffset = anchorClose + 3;
+    let matchedComment = false;
+
+    while (body.startsWith("{>>", nextOffset)) {
+      const commentClose = body.indexOf("<<}", nextOffset + 3);
+
+      if (commentClose === -1) break;
+
+      const metadataMatch = body
+        .slice(commentClose + 3)
+        .match(attributeMetadataBlockPattern);
+
+      if (!metadataMatch) break;
+
+      matchedComment = true;
+      const commentText = body.slice(nextOffset + 3, commentClose);
+      const metadataText = metadataMatch[0];
+      const metadataEnd = commentClose + 3 + metadataText.length;
+      const fields = parseMetadataAttributeFields(metadataText);
+      const id = fields.get("id");
+
+      if (!id || !multilineCommentBodyPattern.test(commentText)) {
+        normalized += body.slice(nextOffset, metadataEnd);
+        nextOffset = metadataEnd;
+        continue;
+      }
+
+      if (!changed) {
+        nextEndmatter = cloneParsedEndmatter(parsedEndmatter);
+        changed = true;
+      }
+
+      const entry: Record<string, unknown> = {
+        ...(nextEndmatter.comments.get(id) ?? {}),
+        body: commentText,
+        by: fields.get("by") ?? "user",
+        at: fields.get("at") ?? new Date().toISOString(),
+      };
+      const parentId = fields.get("re");
+
+      if (parentId) {
+        entry.re = parentId;
+      } else {
+        delete entry.re;
+      }
+
+      nextEndmatter.comments.set(id, entry);
+      normalized += `{>><<}{#${id}}`;
+      nextOffset = metadataEnd;
+    }
+
+    if (!matchedComment) {
+      cursor = anchorClose + 3;
+      continue;
+    }
+
+    cursor = nextOffset;
+  }
+
+  if (!changed) {
+    return { body, parsedEndmatter, endmatter: null };
+  }
+
+  return {
+    body: normalized,
+    parsedEndmatter: nextEndmatter,
+    endmatter: parsedEndmatterToYaml(nextEndmatter),
+  };
+}
+
 function areEndmatterEntriesEqual(
   left: Record<string, unknown>,
   right: Record<string, unknown>,
@@ -334,6 +542,12 @@ function endmatterEntryForComment(
   } else if (comment.parentCommentId) {
     next.body = comment.content;
     next.re = comment.parentCommentId;
+  } else if (
+    typeof existing.body === "string" ||
+    multilineCommentBodyPattern.test(comment.content)
+  ) {
+    next.body = comment.content;
+    delete next.re;
   } else {
     delete next.body;
     delete next.re;
@@ -584,7 +798,11 @@ function serializeCommentBlocks(
   let result = "";
 
   for (const comment of orderedComments) {
-    result += `{>>${comment.content}<<}${
+    const inlineContent =
+      useEndmatter && multilineCommentBodyPattern.test(comment.content)
+        ? ""
+        : comment.content;
+    result += `{>>${inlineContent}<<}${
       useEndmatter ? `{#${comment.id}}` : serializeMetadata(comment)
     }`;
   }
@@ -670,7 +888,11 @@ function tokenizeCriticCommentAnchor(
           endmatter,
           "comment",
         ),
-        content: commentText,
+        content: commentContentFromMarker(
+          commentText,
+          referenceMetadataText,
+          endmatter,
+        ),
       },
       [...existingComments, ...parsedComments],
     );
@@ -747,7 +969,11 @@ function tokenizeCriticCommentBlocks(
           endmatter,
           "comment",
         ),
-        content: commentText,
+        content: commentContentFromMarker(
+          commentText,
+          referenceMetadataText,
+          endmatter,
+        ),
       },
       [...existingComments, ...parsedComments],
     );
@@ -963,7 +1189,11 @@ function renderCriticCodeText(
             endmatter,
             "comment",
           ),
-          content: commentText,
+          content: commentContentFromMarker(
+            commentText,
+            referenceMetadataText,
+            endmatter,
+          ),
         },
         [...comments.values(), ...parsedComments],
       );
@@ -1392,13 +1622,16 @@ export function criticMarkdownHasReviewRail(
   options?: MarkdownOptions,
 ): boolean {
   const { body, endmatter } = splitYamlDocumentMetadata(markdown);
-  const parsedEndmatter = parseReviewEndmatter(endmatter);
+  const normalized = normalizeLegacyMultilineComments(
+    body,
+    parseReviewEndmatter(endmatter),
+  );
   const { parser, comments, changes } = createCriticMarked(
     options,
-    parsedEndmatter,
+    normalized.parsedEndmatter,
   );
-  parser.parse(protectRichTextRoundTripMarkdown(body));
-  addEndmatterFeedback(comments, parsedEndmatter);
+  parser.parse(protectRichTextRoundTripMarkdown(normalized.body));
+  addEndmatterFeedback(comments, normalized.parsedEndmatter);
   return comments.size > 0 || changes.size > 0;
 }
 
@@ -1413,15 +1646,26 @@ export function criticMarkdownToRenderedHtml(
   endmatter: string | null;
 } {
   const { frontmatter, body, endmatter } = splitYamlDocumentMetadata(markdown);
-  const parsedEndmatter = parseReviewEndmatter(endmatter);
+  const normalized = normalizeLegacyMultilineComments(
+    body,
+    parseReviewEndmatter(endmatter),
+  );
   const { parser, comments, changes } = createCriticMarked(
     options,
-    parsedEndmatter,
+    normalized.parsedEndmatter,
   );
-  const html = parser.parse(protectRichTextRoundTripMarkdown(body)) as string;
-  addEndmatterFeedback(comments, parsedEndmatter);
+  const html = parser.parse(
+    protectRichTextRoundTripMarkdown(normalized.body),
+  ) as string;
+  addEndmatterFeedback(comments, normalized.parsedEndmatter);
 
-  return { html, comments, changes, frontmatter, endmatter };
+  return {
+    html,
+    comments,
+    changes,
+    frontmatter,
+    endmatter: normalized.endmatter ?? endmatter,
+  };
 }
 
 export function criticMarkdownToEditorState(
@@ -1434,22 +1678,31 @@ export function criticMarkdownToEditorState(
   endmatter: string | null;
 } {
   const { frontmatter, body, endmatter } = splitYamlDocumentMetadata(markdown);
-  const parsedEndmatter = parseReviewEndmatter(endmatter);
-  const { parser, comments } = createCriticMarked(options, parsedEndmatter);
-  const html = parser.parse(protectRichTextRoundTripMarkdown(body)) as string;
+  const normalized = normalizeLegacyMultilineComments(
+    body,
+    parseReviewEndmatter(endmatter),
+  );
+  const { parser, comments } = createCriticMarked(
+    options,
+    normalized.parsedEndmatter,
+  );
+  const html = parser.parse(
+    protectRichTextRoundTripMarkdown(normalized.body),
+  ) as string;
   const doc = generateJSON(html, extensions) as JSONContent & {
     yamlFrontmatter?: string;
     yamlEndmatter?: string;
   };
-  addEndmatterFeedback(comments, parsedEndmatter);
+  addEndmatterFeedback(comments, normalized.parsedEndmatter);
   if (frontmatter) {
     doc.yamlFrontmatter = frontmatter;
   }
-  if (endmatter) {
-    doc.yamlEndmatter = endmatter;
+  const outputEndmatter = normalized.endmatter ?? endmatter;
+  if (outputEndmatter) {
+    doc.yamlEndmatter = outputEndmatter;
   }
 
-  return { doc, comments, frontmatter, endmatter };
+  return { doc, comments, frontmatter, endmatter: outputEndmatter };
 }
 
 function collectCriticChangesFromDoc(

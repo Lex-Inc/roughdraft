@@ -65,7 +65,9 @@ describe("CriticMarkup comments", () => {
           "<details>",
           "<summary>Literal examples</summary>",
           "",
-          '{==example==}{>>literal HTML comment example<<}{id="c60" by="AI" at="2026-05-24T18:50:00.000Z"}',
+          "{==example==}{>>First paragraph.",
+          "",
+          'Second paragraph.<<}{id="c61" by="AI" at="2026-05-24T18:50:00.000Z"}',
           "",
           "</details>",
           "",
@@ -95,6 +97,35 @@ describe("CriticMarkup comments", () => {
       authorType: "ai",
     });
     expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+  });
+
+  it("does not render raw legacy metadata when inline comment bodies contain blank lines", () => {
+    const input = [
+      "This is {==text==}{>>First paragraph.",
+      "",
+      '- Second paragraph.<<}{id="c1" by="user" at="2026-04-28T12:00:00.000Z"} text.',
+      "",
+    ].join("\n");
+
+    const { html, comments } = criticMarkdownToRenderedHtml(input);
+    const renderedText =
+      new DOMParser().parseFromString(html, "text/html").body.textContent ?? "";
+
+    expect(renderedText).not.toContain('<<}{id="c1"');
+    expect(comments.get("c1")).toMatchObject({
+      id: "c1",
+      content: "First paragraph.\n\n- Second paragraph.",
+      authorType: "user",
+    });
+
+    const parsed = criticMarkdownToEditorState(input);
+    const output = editorStateToCriticMarkdown(parsed.doc, parsed.comments);
+
+    expect(output).toContain("{==text==}{>><<}{#c1}");
+    expect(output).toContain("body: |");
+    expect(output).toContain("First paragraph.");
+    expect(output).toContain("- Second paragraph.");
+    expect(output).not.toContain('<<}{id="c1"');
   });
 
   it("renders YAML endmatter-backed root comments and replies", () => {
