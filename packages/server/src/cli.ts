@@ -2117,43 +2117,81 @@ async function runWatch(
     serverUrl = result.server.url;
   }
   const relativePath = path.relative(target.projectDir, target.openPath);
-  const body: {
-    projectPath: string;
-    path: string;
-    timeoutSeconds?: number;
-    batchWindowSeconds: number;
-    fromNow: boolean;
-  } = {
-    projectPath: target.projectDir,
-    path: relativePath,
-    batchWindowSeconds: options.batchWindowSeconds,
-    fromNow: !options.replay,
-  };
-  if (options.timeoutSeconds !== undefined) {
-    body.timeoutSeconds = options.timeoutSeconds;
-  }
+  // Node's built-in fetch (undici) aborts any request whose response headers
+  // have not arrived within 5 minutes (UND_ERR_HEADERS_TIMEOUT). A single
+  // unbounded long-poll therefore crashes whenever a review takes longer than
+  // that. Poll in slices shorter than that ceiling and resume from the
+  // server's sequence cursor so no events are lost between slices.
+  const POLL_SLICE_SECONDS = 240;
 
-  const response = await deps.fetchImpl(
-    new URL("/api/review-events/watch", serverUrl),
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      ...(options.timeoutSeconds !== undefined
-        ? { signal: AbortSignal.timeout((options.timeoutSeconds + 5) * 1000) }
-        : {}),
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(`Failed to watch review events: ${response.status}`);
-  }
-
-  const payload = (await response.json()) as {
+  const deadline =
+    options.timeoutSeconds !== undefined
+      ? Date.now() + options.timeoutSeconds * 1000
+      : null;
+  let afterSequence = 0;
+  let fromNow = !options.replay;
+  let payload: {
     events?: unknown[];
     timedOut?: boolean;
     nextSequence?: number;
   };
+
+  for (;;) {
+    const sliceSeconds =
+      deadline === null
+        ? POLL_SLICE_SECONDS
+        : Math.min(
+            POLL_SLICE_SECONDS,
+            Math.max(1, Math.ceil((deadline - Date.now()) / 1000)),
+          );
+
+    const body: {
+      projectPath: string;
+      path: string;
+      timeoutSeconds: number;
+      batchWindowSeconds: number;
+      fromNow: boolean;
+      afterSequence: number;
+    } = {
+      projectPath: target.projectDir,
+      path: relativePath,
+      timeoutSeconds: sliceSeconds,
+      batchWindowSeconds: options.batchWindowSeconds,
+      fromNow,
+      afterSequence,
+    };
+
+    const response = await deps.fetchImpl(
+      new URL("/api/review-events/watch", serverUrl),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout((sliceSeconds + 5) * 1000),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to watch review events: ${response.status}`);
+    }
+
+    payload = (await response.json()) as {
+      events?: unknown[];
+      timedOut?: boolean;
+      nextSequence?: number;
+    };
+
+    if (!payload.timedOut) {
+      break;
+    }
+    if (deadline !== null && Date.now() >= deadline) {
+      break;
+    }
+    if (typeof payload.nextSequence === "number") {
+      afterSequence = payload.nextSequence;
+    }
+    fromNow = false;
+  }
 
   if (json) {
     emitJson(deps.log, payload);

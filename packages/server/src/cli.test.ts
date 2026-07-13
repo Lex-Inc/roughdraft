@@ -1076,8 +1076,17 @@ describe("cli", () => {
     }
     expect(watchRequestBody).toMatchObject({
       batchWindowSeconds: 0,
+      fromNow: true,
+      afterSequence: 0,
     });
-    expect(watchRequestBody).not.toHaveProperty("timeoutSeconds");
+    // The CLI polls in bounded slices (staying under undici's 5-minute
+    // headers timeout) and re-polls with the server's sequence cursor, so
+    // each request carries a slice timeout even when the overall wait is
+    // unbounded.
+    expect(
+      (watchRequestBody as unknown as { timeoutSeconds?: number })
+        .timeoutSeconds,
+    ).toBeLessThanOrEqual(240);
     await fetch(`http://localhost:${persisted?.port}/api/review-events`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
