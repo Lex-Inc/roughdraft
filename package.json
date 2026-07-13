@@ -41,7 +41,8 @@
   ],
   "dependencies": {
     "@roughdraft/rfm": "file:packages/rfm",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.12",
@@ -50,10 +51,5 @@
     "knip": "^6.7.0",
     "tsx": "^4.21.0",
     "typescript": "^5.8.3"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
   }
 }
