@@ -36,7 +36,7 @@ function PopoverContent({
         <PopoverPrimitive.Popup
           data-slot="popover-content"
           className={cn(
-            "z-50 w-80 max-w-[calc(100vw-1.5rem)] origin-(--transform-origin) rounded-lg border border-[#DCD6CC] dark:border-slate-700 bg-[#FFFDFC] dark:bg-slate-900 p-4 text-sm text-stone-800 dark:text-slate-200 shadow-[0_16px_44px_rgba(57,47,38,0.18)] dark:shadow-[0_16px_44px_rgba(0,0,0,0.45)] outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-[ending-style]:animate-out data-[ending-style]:fade-out-0 data-[ending-style]:zoom-out-95 data-[starting-style]:animate-in data-[starting-style]:fade-in-0 data-[starting-style]:zoom-in-95",
+            "isolate z-50 w-80 max-w-[calc(100vw-1.5rem)] origin-(--transform-origin) rounded-lg border border-[#DCD6CC] dark:border-slate-700 bg-[#FFFDFC] dark:bg-slate-900 p-4 text-sm text-stone-800 dark:text-slate-200 shadow-[0_16px_44px_rgba(57,47,38,0.18)] dark:shadow-[0_16px_44px_rgba(0,0,0,0.45)] outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-[ending-style]:animate-out data-[ending-style]:fade-out-0 data-[ending-style]:zoom-out-95 data-[starting-style]:animate-in data-[starting-style]:fade-in-0 data-[starting-style]:zoom-in-95",
             className,
           )}
           {...props}
