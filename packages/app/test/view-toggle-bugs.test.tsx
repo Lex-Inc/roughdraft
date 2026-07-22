@@ -291,12 +291,14 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
     documentDiskChangeState = "clean",
     documentContent = "Hello world",
     documentCopyPath = "test.md",
+    documentFilenameLabel = "test.md",
     watcherCount = 0,
     onSaveDocument = async () => {},
   }: {
     documentDiskChangeState?: "clean" | "changed" | "conflict" | "paused";
     documentContent?: string;
     documentCopyPath?: string | null;
+    documentFilenameLabel?: string;
     watcherCount?: number;
     onSaveDocument?: (id: string, content: string) => Promise<void>;
   } = {}) {
@@ -310,7 +312,7 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
           documentPage={createPage(documentContent)}
           activeDocumentPath="test.md"
           documentCopyPath={documentCopyPath}
-          documentFilenameLabel="test.md"
+          documentFilenameLabel={documentFilenameLabel}
           documentEditorViewMode="rich-text"
           onDocumentEditorViewModeChange={() => {}}
           onSaveDocument={onSaveDocument}
@@ -477,6 +479,72 @@ describe("saving/saved status indicator (issue 2 fix)", () => {
     );
     expect(richTextAction.textContent).toContain("Heading Body");
     expect(richTextAction.textContent).not.toContain("# Heading");
+  });
+
+  async function hoverForFileMenuTooltip(action: "path" | "filename") {
+    const menuAction = getByTestId(
+      document.body,
+      `document-file-menu-${action}`,
+    );
+    await act(async () => {
+      menuAction.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+      menuAction.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(700);
+      await Promise.resolve();
+    });
+  }
+
+  it("shows the full path in a tooltip when the path preview is clipped", async () => {
+    const longPath =
+      "/Users/me/projects/deeply/nested/workspace/notes/long-example.md";
+    await renderWorkspace({ documentCopyPath: longPath });
+    await openFileMenu();
+
+    const pathAction = getByTestId(document.body, "document-file-menu-path");
+    expect(pathAction.textContent).not.toContain(longPath);
+
+    vi.useFakeTimers();
+    await hoverForFileMenuTooltip("path");
+
+    const tooltip = getByTestId(
+      document.body,
+      "document-file-menu-path-tooltip",
+    );
+    expect(tooltip.textContent).toContain(longPath);
+    vi.useRealTimers();
+  });
+
+  it("shows the full filename in a tooltip when the filename preview is clipped", async () => {
+    const longFilename =
+      "2026-07-21_mine-kpi-tracking-system-specification-draft.md";
+    await renderWorkspace({ documentFilenameLabel: longFilename });
+    await openFileMenu();
+
+    vi.useFakeTimers();
+    await hoverForFileMenuTooltip("filename");
+
+    const tooltip = getByTestId(
+      document.body,
+      "document-file-menu-filename-tooltip",
+    );
+    expect(tooltip.textContent).toContain(longFilename);
+    vi.useRealTimers();
+  });
+
+  it("skips the path tooltip when the preview already shows the full path", async () => {
+    await renderWorkspace({ documentCopyPath: "test.md" });
+    await openFileMenu();
+
+    vi.useFakeTimers();
+    await hoverForFileMenuTooltip("path");
+
+    expect(
+      queryByTestId(document.body, "document-file-menu-path-tooltip"),
+    ).toBeNull();
+    vi.useRealTimers();
   });
 
   it("copies document rich text with html and plain markdown flavors", async () => {
