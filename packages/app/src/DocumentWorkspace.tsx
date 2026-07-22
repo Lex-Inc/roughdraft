@@ -1115,8 +1115,9 @@ export function DocumentWorkspace({
                                 data-testid={`document-file-menu-${action}-tooltip`}
                                 side="right"
                                 sideOffset={12}
+                                align="start"
                                 className="break-all border border-[#DCD6CC] bg-[#FFFDFC] text-stone-800 shadow-[0_16px_44px_rgba(57,47,38,0.18)] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:shadow-[0_16px_44px_rgba(0,0,0,0.45)]"
-                                arrowClassName="border-[#DCD6CC] bg-[#FFFDFC] dark:border-slate-700 dark:bg-slate-900 data-[side=inline-end]:border-b data-[side=inline-end]:border-l data-[side=inline-start]:border-t data-[side=inline-start]:border-r data-[side=left]:border-t data-[side=left]:border-r data-[side=right]:border-b data-[side=right]:border-l"
+                                arrowClassName="border-[#DCD6CC] bg-[#FFFDFC] dark:border-slate-700 dark:bg-slate-900 data-[side=inline-end]:border-b data-[side=inline-end]:border-l data-[side=inline-start]:border-t data-[side=inline-start]:border-r data-[side=left]:border-t data-[side=left]:border-r data-[side=right]:border-b data-[side=right]:border-l data-[side=inline-end]:top-3.5! data-[side=inline-end]:translate-y-0 data-[side=inline-start]:top-3.5! data-[side=inline-start]:translate-y-0 data-[side=left]:top-3.5! data-[side=left]:translate-y-0 data-[side=right]:top-3.5! data-[side=right]:translate-y-0"
                               >
                                 {tooltipValue}
                               </TooltipContent>
