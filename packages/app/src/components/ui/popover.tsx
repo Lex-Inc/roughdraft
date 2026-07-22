@@ -42,7 +42,7 @@ function PopoverContent({
           {...props}
         >
           {children}
-          <PopoverPrimitive.Arrow className="z-50 size-2.5 rotate-45 rounded-[2px] border-t border-l border-[#DCD6CC] dark:border-slate-700 bg-[#FFFDFC] dark:bg-slate-900 data-[side=bottom]:top-0 data-[side=bottom]:-translate-y-1/2 data-[side=top]:bottom-0 data-[side=top]:translate-y-1/2" />
+          <PopoverPrimitive.Arrow className="z-[-1] size-2.5 rotate-45 rounded-[2px] border-t border-l border-[#DCD6CC] dark:border-slate-700 bg-[#FFFDFC] dark:bg-slate-900 data-[side=bottom]:top-0 data-[side=bottom]:-translate-y-1/2 data-[side=top]:bottom-0 data-[side=top]:translate-y-1/2" />
         </PopoverPrimitive.Popup>
       </PopoverPrimitive.Positioner>
     </PopoverPrimitive.Portal>
