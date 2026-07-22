@@ -33,6 +33,7 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
+  TooltipProvider,
 } from "./components/ui/tooltip";
 import {
   criticMarkdownHasReviewRail,
@@ -58,6 +59,7 @@ type ReviewHandoffState =
   | "error";
 type FileCopyAction = "path" | "filename" | "markdown" | "rich-text";
 const FILE_COPY_PREVIEW_MAX_LENGTH = 34;
+const FILE_COPY_TOOLTIP_DELAY_MS = 600;
 const reviewCompleteTitles = [
   "Great work!",
   "Nice one!",
@@ -654,10 +656,15 @@ export function DocumentWorkspace({
     documentEditorViewMode === "rich-text"
       ? "Switch to code view"
       : "Switch to rich text view";
+  const fileCopyPathValue =
+    documentCopyPath ?? activeDocumentPath ?? documentFilenameLabel;
+  const fileCopyTooltipValueByAction: Partial<Record<FileCopyAction, string>> =
+    {
+      path: fileCopyPathValue,
+      filename: documentFilenameLabel,
+    };
   const fileCopyPreviewByAction: Record<FileCopyAction, string> = {
-    path: formatFileCopyPreview(
-      documentCopyPath ?? activeDocumentPath ?? documentFilenameLabel,
-    ),
+    path: formatFileCopyPreview(fileCopyPathValue),
     filename: formatFileCopyPreview(documentFilenameLabel),
     markdown: formatFileCopyPreview(documentPage?.content ?? ""),
     "rich-text": formatFileCopyPreview(
@@ -1058,33 +1065,67 @@ export function DocumentWorkspace({
                     align="start"
                     sideOffset={4}
                   >
-                    <div className="flex flex-col">
-                      {fileCopyMenuOptions.map(({ action, label }) => (
-                        <button
-                          key={action}
-                          type="button"
-                          data-testid={`document-file-menu-${action}`}
-                          className="flex items-start gap-2 rounded-md px-2 py-1.5 text-left text-[0.72rem] leading-none text-stone-700 outline-none transition hover:bg-[#EEE9E1] focus-visible:bg-[#EEE9E1] dark:text-stone-300 dark:hover:bg-slate-700 dark:focus-visible:bg-slate-700"
-                          onClick={() => void handleCopyFileMenuAction(action)}
-                        >
-                          <Copy
-                            className="mt-[0.06rem] size-4 shrink-0 text-stone-500 dark:text-slate-400"
-                            aria-hidden="true"
-                          />
-                          <span className="grid min-w-0 flex-1 gap-1">
-                            <span className="truncate font-medium">
-                              {copiedFileAction === action ? "Copied!" : label}
-                            </span>
-                            <span className="truncate text-[0.66rem] leading-none text-stone-400 dark:text-slate-500">
-                              {fileCopyPreviewByAction[action]}
-                            </span>
-                          </span>
-                          {copiedFileAction === action ? (
-                            <Check className="mt-[0.06rem] ml-auto size-3 shrink-0 text-stone-500 dark:text-stone-400" />
-                          ) : null}
-                        </button>
-                      ))}
-                    </div>
+                    <TooltipProvider
+                      delay={FILE_COPY_TOOLTIP_DELAY_MS}
+                      timeout={0}
+                    >
+                      <div className="flex flex-col">
+                        {fileCopyMenuOptions.map(({ action, label }) => {
+                          const menuItem = (
+                            <button
+                              key={action}
+                              type="button"
+                              data-testid={`document-file-menu-${action}`}
+                              className="flex items-start gap-2 rounded-md px-2 py-1.5 text-left text-[0.72rem] leading-none text-stone-700 outline-none transition hover:bg-[#EEE9E1] focus-visible:bg-[#EEE9E1] dark:text-stone-300 dark:hover:bg-slate-700 dark:focus-visible:bg-slate-700"
+                              onClick={() =>
+                                void handleCopyFileMenuAction(action)
+                              }
+                            >
+                              <Copy
+                                className="mt-[0.06rem] size-4 shrink-0 text-stone-500 dark:text-slate-400"
+                                aria-hidden="true"
+                              />
+                              <span className="grid min-w-0 flex-1 gap-1">
+                                <span className="truncate font-medium">
+                                  {copiedFileAction === action
+                                    ? "Copied!"
+                                    : label}
+                                </span>
+                                <span className="truncate text-[0.66rem] leading-none text-stone-400 dark:text-slate-500">
+                                  {fileCopyPreviewByAction[action]}
+                                </span>
+                              </span>
+                              {copiedFileAction === action ? (
+                                <Check className="mt-[0.06rem] ml-auto size-3 shrink-0 text-stone-500 dark:text-stone-400" />
+                              ) : null}
+                            </button>
+                          );
+                          const tooltipValue =
+                            fileCopyTooltipValueByAction[action];
+                          if (
+                            tooltipValue === undefined ||
+                            tooltipValue === fileCopyPreviewByAction[action]
+                          ) {
+                            return menuItem;
+                          }
+                          return (
+                            <Tooltip key={action}>
+                              <TooltipTrigger render={menuItem} />
+                              <TooltipContent
+                                data-testid={`document-file-menu-${action}-tooltip`}
+                                side="right"
+                                sideOffset={8}
+                                align="start"
+                                className="break-all border border-[#DCD6CC] bg-[#FFFDFC] text-stone-800 shadow-[0_16px_44px_rgba(57,47,38,0.18)] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:shadow-[0_16px_44px_rgba(0,0,0,0.45)]"
+                                arrowClassName="hidden"
+                              >
+                                {tooltipValue}
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        })}
+                      </div>
+                    </TooltipProvider>
                   </PopoverContent>
                 </Popover>
                 <div className="ml-auto inline-flex h-[1.25rem] shrink-0 items-center">
