@@ -1,6 +1,5 @@
 import { Extension, Mark, Node, mergeAttributes } from "@tiptap/core";
 import Code from "@tiptap/extension-code";
-import CodeBlock from "@tiptap/extension-code-block";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -17,6 +16,9 @@ import type {
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
+import { ReactNodeViewRenderer } from "@tiptap/react";
+import { CodeBlockShiki } from "tiptap-extension-code-block-shiki";
+import { CodeBlockView, mermaidSourceSelectionEvent } from "./CodeBlockView";
 import { rawMarkdownBlockAttribute } from "./markdown";
 
 declare module "@tiptap/core" {
@@ -713,8 +715,50 @@ const MarkdownCode = Code.extend({
   excludes: "bold italic strike link",
 });
 
-const MarkdownCodeBlock = CodeBlock.extend({
+const MarkdownCodeBlock = CodeBlockShiki.extend({
   marks: "commentRef criticChange",
+
+  addNodeView() {
+    return ReactNodeViewRenderer(CodeBlockView, {
+      contentDOMElementTag: "span",
+    });
+  },
+});
+
+const MermaidSelectionReveal = Extension.create({
+  name: "mermaidSelectionReveal",
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey("mermaidSelectionReveal"),
+        view: () => ({
+          update: (view, previousState) => {
+            if (view.state.selection.eq(previousState.selection)) return;
+
+            const { $from } = view.state.selection;
+            const node = $from.parent;
+            const language =
+              typeof node.attrs.language === "string"
+                ? node.attrs.language.trim().toLowerCase()
+                : "";
+
+            if (node.type.name !== "codeBlock" || language !== "mermaid") {
+              return;
+            }
+
+            const position = $from.before($from.depth);
+            const nodeViewElement = view.nodeDOM(position);
+            if (!(nodeViewElement instanceof HTMLElement)) return;
+
+            nodeViewElement.dispatchEvent(
+              new CustomEvent(mermaidSourceSelectionEvent, { bubbles: true }),
+            );
+          },
+        }),
+      }),
+    ];
+  },
 });
 
 const MarkdownImage = Image.extend({
@@ -799,7 +843,14 @@ export function createEditorExtensions(placeholder: string) {
     CommentRef,
     CriticChange,
     RawMarkdownBlock,
-    MarkdownCodeBlock,
+    MarkdownCodeBlock.configure({
+      defaultTheme: "github-light",
+      themes: {
+        light: "github-light",
+        dark: "github-dark",
+      },
+    }),
+    MermaidSelectionReveal,
     CommentHighlight,
     CriticChangeHighlight,
     MarkdownImage.configure({

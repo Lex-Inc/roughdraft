@@ -381,6 +381,67 @@
     @apply bg-transparent p-0 text-inherit;
   }
 
+  .tiptap .node-codeBlock.shiki,
+  .tiptap .shiki span {
+    /* biome-ignore lint/complexity/noImportantStyles: Shiki emits inline theme backgrounds; Roughdraft owns the rounded block surface and uses Shiki only for token colors. */
+    background-color: transparent !important;
+  }
+
+  .dark .tiptap .shiki,
+  .dark .tiptap .shiki span {
+    /* biome-ignore lint/complexity/noImportantStyles: Shiki puts its light theme in inline styles, so its documented dual-theme variables need this override. */
+    color: var(--shiki-dark) !important;
+  }
+
+  .tiptap .mermaid-code-block {
+    @apply overflow-hidden rounded-2xl border;
+    margin: 1.35em 0;
+    background-color: var(--code-block-background);
+    border-color: var(--code-block-border);
+    color: var(--code-block-foreground);
+  }
+
+  .tiptap .mermaid-code-block-toolbar {
+    @apply flex items-center gap-1 border-b px-2 py-1.5;
+    border-color: var(--code-block-border);
+  }
+
+  .tiptap .mermaid-code-block-diagram {
+    @apply min-h-40 overflow-x-auto p-5;
+  }
+
+  .tiptap .mermaid-code-block-loading {
+    @apply flex min-h-28 items-center justify-center gap-2 text-sm text-muted-foreground;
+  }
+
+  .tiptap .mermaid-code-block-spinner {
+    @apply size-4 animate-spin;
+  }
+
+  .tiptap .mermaid-code-block-svg {
+    @apply flex min-h-28 items-center justify-center;
+  }
+
+  .tiptap .mermaid-code-block-svg svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+
+  .tiptap .mermaid-code-block-error {
+    @apply mx-3 mt-3 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive;
+  }
+
+  .tiptap .mermaid-code-block-error svg {
+    @apply mt-0.5 size-4 shrink-0;
+  }
+
+  .tiptap pre.mermaid-code-block-source {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+
   .tiptap blockquote {
     @apply border-l-4 border-slate-300 dark:border-slate-600 pl-4 text-slate-600 dark:text-slate-400;
     margin: 1.3em 0;

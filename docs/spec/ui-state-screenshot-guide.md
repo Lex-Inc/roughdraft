@@ -92,6 +92,26 @@ suggestions:
 ```markdown
 # Fenced examples This page should not show a review rail just because examples appear inside code fences. ```text {==example==}{>>comment<<}{#c1} {++inserted++} {--deleted--} {~~old~>new~~} ```
 ```
+### Code And Diagram Document
+````markdown
+# Code and diagrams
+
+```typescript
+interface Config {
+  enabled: boolean;
+}
+```
+
+```mermaid
+flowchart LR
+  INPUT["Markdown"] --> REVIEW["Review"]
+  REVIEW --> SAVE["Saved file"]
+```
+
+```mermaid
+flowchart ???
+```
+````
 ## Capture Matrix
 | Area | State | How to reach it | Useful selectors | Notes |
 | --- | --- | --- | --- | --- |
@@ -135,6 +155,13 @@ suggestions:
 | Editor | Selection menu on suggestion | Select existing suggestion text | `selection-menu-action-accept-suggestion`, `selection-menu-action-reject-suggestion` | Requires review fixture. |
 | Editor | Link popover | Click a link or choose Link from selection menu | `link-popover`, `link-url-input`, `link-action-open`, `link-action-delete` | Use the plain fixture link. |
 | Editor | Context menu | Right-click in rich editor | `editor-context-menu` | Capture comment, suggestion, paste, and paste-markdown actions. |
+| Editor | Highlighted code, light | Open the code and diagram fixture with a light system scheme | `.node-codeBlock.shiki` | Capture TypeScript token colors and the unchanged editable code surface. |
+| Editor | Highlighted code, dark | Open the code and diagram fixture with a dark system scheme | `.node-codeBlock.shiki` | Confirm GitHub Dark token colors remain legible against the code-block background. |
+| Mermaid | Diagram | Open the code and diagram fixture | `mermaid-code-block`, `mermaid-rendered-svg`, `mermaid-view-diagram` | Diagram is the default view; capture the rendered SVG and selected Diagram control. |
+| Mermaid | Source | Click Source on the valid Mermaid block | `mermaid-source-panel`, `mermaid-view-source` | Capture editable, Shiki-highlighted Mermaid source and the selected Source control. |
+| Mermaid | Loading | Delay the Mermaid dynamic import or render promise | `mermaid-diagram-panel`, `role=status` | Transient; use a component harness or route interception. |
+| Mermaid | Invalid source | Open the invalid Mermaid block | `mermaid-render-error`, `mermaid-source-panel` | Source opens automatically with an actionable error and the document remains editable. |
+| Mermaid | Dark diagram | Open a valid diagram with a dark system scheme | `mermaid-rendered-svg` | Confirm diagram text, nodes, arrows, and background are legible. |
 | Review rail | Comments | Open review fixture in rich mode | `document-review-rail`, `comment-thread-root` | Thread containers use `data-comment-thread-container="true"`. |
 | Review rail | Suggestions | Open review fixture in rich mode | `suggestion-thread-s1`, `suggestion-thread-s2`, `suggestion-thread-s3` | Thread containers use `data-suggestion-thread-container="true"`. |
 | Review rail | Draft suggestion | Select text and choose a suggestion action | `draft-suggestion-thread`, `draft-suggestion-editor` | Capture dismiss/cancel/apply actions. |

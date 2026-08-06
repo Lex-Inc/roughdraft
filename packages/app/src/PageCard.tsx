@@ -1,11 +1,15 @@
 import type { JSONContent } from "@tiptap/core";
-import type { Mark as ProseMirrorMark } from "@tiptap/pm/model";
+import type {
+  Mark as ProseMirrorMark,
+  Node as ProseMirrorNode,
+} from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CommentEditorList } from "./CommentEditorList";
+import { mermaidSourceSelectionEvent } from "./CodeBlockView";
 import {
   type CriticChangeAttrs,
   type CriticComment,
@@ -42,6 +46,26 @@ export type ManualSaveResult =
   | { status: "saved" }
   | { status: "blocked" }
   | { status: "error"; error: unknown };
+
+function onlyAddsTrailingEmptyParagraph(
+  previousDocument: ProseMirrorNode,
+  currentDocument: ProseMirrorNode,
+) {
+  if (currentDocument.childCount !== previousDocument.childCount + 1) {
+    return false;
+  }
+
+  for (let index = 0; index < previousDocument.childCount; index += 1) {
+    if (!previousDocument.child(index).eq(currentDocument.child(index))) {
+      return false;
+    }
+  }
+
+  const trailingNode = currentDocument.lastChild;
+  return (
+    trailingNode?.type.name === "paragraph" && trailingNode.content.size === 0
+  );
+}
 
 export interface DocumentSaveController {
   flushSave: () => Promise<ManualSaveResult>;
@@ -223,7 +247,8 @@ function findCommentRange(editor: Editor | null, commentId: string) {
   let closed = false;
 
   editor.state.doc.descendants((node, pos) => {
-    if (closed || !node.isText) return false;
+    if (closed) return false;
+    if (!node.isText) return;
 
     const hasCommentId = node.marks.some(
       (mark) =>
@@ -256,6 +281,25 @@ function findCommentRange(editor: Editor | null, commentId: string) {
   if (from == null || to == null) return null;
 
   return { from, to };
+}
+
+function revealMermaidSourceForPosition(editor: Editor, position: number) {
+  const $position = editor.state.doc.resolve(position);
+  const node = $position.parent;
+  const language =
+    typeof node.attrs.language === "string"
+      ? node.attrs.language.trim().toLowerCase()
+      : "";
+
+  if (node.type.name !== "codeBlock" || language !== "mermaid") return;
+
+  const nodePosition = $position.before($position.depth);
+  const nodeViewElement = editor.view.nodeDOM(nodePosition);
+  if (!(nodeViewElement instanceof HTMLElement)) return;
+
+  nodeViewElement.dispatchEvent(
+    new CustomEvent(mermaidSourceSelectionEvent, { bubbles: true }),
+  );
 }
 
 function findCommentAnchorElement(editor: Editor | null, commentId: string) {
@@ -607,6 +651,8 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
   const interactionModeRef = useRef<DocumentInteractionMode>(interactionMode);
   const commentsRef = useRef<Map<string, CriticComment>>(new Map());
   const suppressNextMarkdownUpdateRef = useRef(false);
+  const trackedEditorRef = useRef<Editor | null>(null);
+  const lastEditorDocumentRef = useRef<ProseMirrorNode | null>(null);
   const lastFocusRequestKeyRef = useRef<string | null>(null);
   const selectedCommentIdRef = useRef<string | null>(null);
   const selectedChangeIdRef = useRef<string | null>(null);
@@ -1218,17 +1264,36 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
         },
       },
       onUpdate: ({ editor: currentEditor }) => {
+        const currentDocument = currentEditor.state.doc;
+
         if (suppressNextMarkdownUpdateRef.current) {
           suppressNextMarkdownUpdateRef.current = false;
+          lastEditorDocumentRef.current = currentDocument;
           return;
         }
 
+        const previousDocument = lastEditorDocumentRef.current;
+        if (previousDocument?.eq(currentDocument)) return;
+        if (
+          previousDocument &&
+          onlyAddsTrailingEmptyParagraph(previousDocument, currentDocument)
+        ) {
+          lastEditorDocumentRef.current = currentDocument;
+          return;
+        }
+
+        lastEditorDocumentRef.current = currentDocument;
         emitMarkdownChange(currentEditor.getJSON());
         refreshCriticChanges();
       },
     },
     [page.id],
   );
+
+  if (trackedEditorRef.current !== editor) {
+    trackedEditorRef.current = editor;
+    lastEditorDocumentRef.current = editor?.state.doc ?? null;
+  }
 
   editorRef.current = editor;
   selectedCommentIdRef.current = selectedCommentId;
@@ -1294,6 +1359,7 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
     if (JSON.stringify(editor.getJSON()) !== JSON.stringify(nextDoc)) {
       editor.commands.setContent(nextDoc, { emitUpdate: false });
     }
+    lastEditorDocumentRef.current = editor.state.doc;
 
     refreshCriticChanges();
   }, [editor, parsedContent, refreshCriticChanges]);
@@ -1838,6 +1904,7 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
 
     const range = findCommentRange(currentEditor, commentId);
     if (range) {
+      revealMermaidSourceForPosition(currentEditor, range.from);
       currentEditor.commands.focus(undefined, { scrollIntoView: false });
       currentEditor.view.dispatch(
         currentEditor.state.tr.setSelection(
@@ -1862,6 +1929,7 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
     const range = getCriticChangeRange(currentEditor, changeId);
     if (!range) return;
 
+    revealMermaidSourceForPosition(currentEditor, range.from);
     currentEditor.commands.focus(undefined, { scrollIntoView: false });
     currentEditor.view.dispatch(
       currentEditor.state.tr.setSelection(
