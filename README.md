@@ -27,6 +27,8 @@ Roughdraft opens a single markdown file directly for CriticMarkup comments and s
 - **Works with your AI agent** — Tell your local agent to open a file in Roughdraft on your computer, then keep collaborating from there
   
 - **Comments & suggested changes** — Use CriticMarkup for inline feedback, revisions, and review conversations
+
+- **Diagrams and highlighted code** — Mermaid fences open as diagrams with an editable source view, while TypeScript, TSX, JavaScript, Python, and other fenced languages use Shiki syntax highlighting
   
 - **Markdown files on disk** — Everything stays as regular markdown files you can also edit in VS Code, Vim, Cursor, or anywhere else
   

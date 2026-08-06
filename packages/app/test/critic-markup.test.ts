@@ -657,6 +657,64 @@ const command = "{==roughdraft open==}{>>test<<}{id="c1" by="user" at="2026-04-2
     }
   });
 
+  it("preserves newlines around a comment inside a fenced code block", () => {
+    const input = `\`\`\`ts
+const first = 1;
+
+const {==second==}{>>Check this value<<}{id="c1" by="user" at="2026-08-06T10:30:00.000Z"} = 2;
+\`\`\`
+`;
+
+    const { doc, comments } = criticMarkdownToEditorState(input);
+
+    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+  });
+
+  it.each([
+    {
+      name: "TypeScript additions",
+      input: `\`\`\`typescript
+type Config = {
+  enabled: {++boolean++}{id="s1" by="user" at="2026-08-06T10:31:00.000Z"};
+};
+\`\`\`
+`,
+    },
+    {
+      name: "TypeScript deletions",
+      input: `\`\`\`ts
+function run() {
+
+  {--return false;--}{id="s2" by="AI" at="2026-08-06T10:32:00.000Z"}
+}
+\`\`\`
+`,
+    },
+    {
+      name: "TSX substitutions with comments",
+      input: `\`\`\`tsx
+export function Status() {
+  return <span>{~~"waiting"~>"ready"~~}{id="s3" by="user" at="2026-08-06T10:33:00.000Z"}{>>Use the final state<<}{id="c2" by="user" at="2026-08-06T10:34:00.000Z"}</span>;
+}
+\`\`\`
+`,
+    },
+    {
+      name: "Mermaid suggestions and indentation",
+      input: `\`\`\`mermaid
+flowchart LR
+  A[{++Start++}{id="s4" by="AI" at="2026-08-06T10:35:00.000Z"}] --> B
+
+  B[{--Old step--}{id="s5" by="user" at="2026-08-06T10:36:00.000Z"}] --> C[{~~Draft~>Done~~}{id="s6" by="user" at="2026-08-06T10:37:00.000Z"}]
+\`\`\`
+`,
+    },
+  ])("preserves multiline $name fences exactly", ({ input }) => {
+    const { doc, comments } = criticMarkdownToEditorState(input);
+
+    expect(editorStateToCriticMarkdown(doc, comments)).toBe(input);
+  });
+
   it("round-trips comment anchors inside fenced code blocks", () => {
     const input = `\`\`\`ts
 const command = "{==roughdraft open==}{>>test<<}{id="c1" by="user" at="2026-04-25T22:14:08.827Z"}";
