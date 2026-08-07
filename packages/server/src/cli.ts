@@ -28,6 +28,11 @@ const SERVER_WAIT_ATTEMPTS = 40;
 const SERVER_WAIT_DELAY_MS = 150;
 const PROCESS_WAIT_ATTEMPTS = 20;
 const PROCESS_WAIT_DELAY_MS = 150;
+// Each watch long-poll must resolve before undici's default 300s headersTimeout;
+// the server also clamps its own wait to 300s, so an unbounded request is never honored.
+const WATCH_POLL_SECONDS = 240;
+const WATCH_RETRY_DELAY_MS = 2_000;
+const WATCH_MAX_CONSECUTIVE_FAILURES = 5;
 const USAGE_ERROR = 2;
 const KNOWN_COMMANDS = [
   "open",
@@ -2102,6 +2107,14 @@ async function runMarkdownDoctor(
   return validation.ok ? 0 : 1;
 }
 
+interface WatchResultPayload {
+  events?: unknown[];
+  timedOut?: boolean;
+  nextSequence?: number;
+}
+
+class WatchRequestError extends Error {}
+
 async function runWatch(
   deps: CliDependencies,
   targetPath: string,
@@ -2117,43 +2130,87 @@ async function runWatch(
     serverUrl = result.server.url;
   }
   const relativePath = path.relative(target.projectDir, target.openPath);
-  const body: {
-    projectPath: string;
-    path: string;
-    timeoutSeconds?: number;
-    batchWindowSeconds: number;
-    fromNow: boolean;
-  } = {
-    projectPath: target.projectDir,
-    path: relativePath,
-    batchWindowSeconds: options.batchWindowSeconds,
-    fromNow: !options.replay,
-  };
-  if (options.timeoutSeconds !== undefined) {
-    body.timeoutSeconds = options.timeoutSeconds;
+
+  const deadline =
+    options.timeoutSeconds !== undefined
+      ? Date.now() + options.timeoutSeconds * 1000
+      : null;
+  let afterSequence: number | null = null;
+  let consecutiveFailures = 0;
+  let payload: WatchResultPayload;
+
+  while (true) {
+    const remainingSeconds =
+      deadline === null
+        ? WATCH_POLL_SECONDS
+        : Math.max(0, (deadline - Date.now()) / 1000);
+    const pollSeconds = Math.min(WATCH_POLL_SECONDS, remainingSeconds);
+    const body: {
+      projectPath: string;
+      path: string;
+      timeoutSeconds: number;
+      batchWindowSeconds: number;
+      fromNow: boolean;
+      afterSequence?: number;
+    } = {
+      projectPath: target.projectDir,
+      path: relativePath,
+      batchWindowSeconds: options.batchWindowSeconds,
+      timeoutSeconds: pollSeconds,
+      fromNow: afterSequence === null ? !options.replay : false,
+    };
+    if (afterSequence !== null) {
+      body.afterSequence = afterSequence;
+    }
+
+    try {
+      const response = await deps.fetchImpl(
+        new URL("/api/review-events/watch", serverUrl),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout((pollSeconds + 5) * 1000),
+        },
+      );
+      if (!response.ok) {
+        throw new WatchRequestError(
+          `Failed to watch review events: ${response.status}`,
+        );
+      }
+      payload = (await response.json()) as WatchResultPayload;
+    } catch (error) {
+      if (error instanceof WatchRequestError) {
+        throw error;
+      }
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= WATCH_MAX_CONSECUTIVE_FAILURES) {
+        throw error;
+      }
+      if (deadline !== null && Date.now() >= deadline) {
+        payload = { events: [], timedOut: true };
+        break;
+      }
+      deps.error(
+        `Watch connection failed (${
+          error instanceof Error ? error.message : String(error)
+        }); retrying...`,
+      );
+      await deps.sleepImpl(WATCH_RETRY_DELAY_MS);
+      continue;
+    }
+
+    consecutiveFailures = 0;
+    if (typeof payload.nextSequence === "number" && payload.nextSequence > 0) {
+      afterSequence = payload.nextSequence - 1;
+    }
+    if (!payload.timedOut) {
+      break;
+    }
+    if (deadline !== null && Date.now() >= deadline) {
+      break;
+    }
   }
-
-  const response = await deps.fetchImpl(
-    new URL("/api/review-events/watch", serverUrl),
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      ...(options.timeoutSeconds !== undefined
-        ? { signal: AbortSignal.timeout((options.timeoutSeconds + 5) * 1000) }
-        : {}),
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(`Failed to watch review events: ${response.status}`);
-  }
-
-  const payload = (await response.json()) as {
-    events?: unknown[];
-    timedOut?: boolean;
-    nextSequence?: number;
-  };
 
   if (json) {
     emitJson(deps.log, payload);
