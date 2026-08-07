@@ -1077,7 +1077,10 @@ describe("cli", () => {
     expect(watchRequestBody).toMatchObject({
       batchWindowSeconds: 0,
     });
-    expect(watchRequestBody).not.toHaveProperty("timeoutSeconds");
+    // Each long-poll must complete before undici's default 300s headersTimeout,
+    // even when the user sets no overall timeout.
+    expect(watchRequestBody?.timeoutSeconds).toBeGreaterThan(0);
+    expect(watchRequestBody?.timeoutSeconds).toBeLessThan(300);
     await fetch(`http://localhost:${persisted?.port}/api/review-events`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1101,6 +1104,175 @@ describe("cli", () => {
         },
       ],
     });
+  });
+
+  it("keeps watching after a transient long-poll fetch failure", async () => {
+    const test = createTestDependencies();
+    const documentPath = path.join(projectDir, "draft.md");
+    fs.writeFileSync(documentPath, "# Draft\n");
+
+    let watchAttempts = 0;
+    const deps = {
+      ...test.deps,
+      sleepImpl: async () => {},
+      fetchImpl: async (
+        input: Parameters<typeof fetch>[0],
+        init?: RequestInit,
+      ) => {
+        const url =
+          input instanceof URL
+            ? input
+            : new URL(
+                typeof input === "string" ? input : input.url,
+                "http://localhost",
+              );
+        if (url.pathname === "/api/review-events/watch") {
+          watchAttempts += 1;
+          if (watchAttempts === 1) {
+            throw new TypeError("fetch failed", {
+              cause: Object.assign(new Error("Headers Timeout Error"), {
+                code: "UND_ERR_HEADERS_TIMEOUT",
+              }),
+            });
+          }
+        }
+        return test.deps.fetchImpl(input, init);
+      },
+    };
+
+    const watchPromise = runCli(
+      ["watch", documentPath, "--json", "--batch-window", "0"],
+      deps,
+    );
+
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (watchAttempts >= 2) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(watchAttempts).toBeGreaterThanOrEqual(2);
+
+    const stateFile = getServerStateFilePath(test.deps.env);
+    const persisted = JSON.parse(fs.readFileSync(stateFile, "utf8")) as {
+      port: number;
+    };
+
+    let watching = false;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const statusUrl = new URL(
+        `http://localhost:${persisted.port}/api/review-events/status`,
+      );
+      statusUrl.searchParams.set("projectPath", projectDir);
+      statusUrl.searchParams.set("path", "draft.md");
+      const status = (await (await fetch(statusUrl)).json()) as {
+        watching: boolean;
+      };
+      if (status.watching) {
+        watching = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(watching).toBe(true);
+
+    await fetch(`http://localhost:${persisted.port}/api/review-events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectPath: projectDir, path: "draft.md" }),
+    });
+
+    const exitCode = await watchPromise;
+    const payload = parseOnlyJsonLog<{
+      timedOut: boolean;
+      events: unknown[];
+    }>(test.logs);
+
+    expect(exitCode).toBe(0);
+    expect(payload.timedOut).toBe(false);
+    expect(payload.events).toHaveLength(1);
+  });
+
+  it("resumes the long-poll with afterSequence after a server-side poll timeout", async () => {
+    const test = createTestDependencies();
+    const documentPath = path.join(projectDir, "draft.md");
+    fs.writeFileSync(documentPath, "# Draft\n");
+
+    const watchBodies: Array<Record<string, unknown>> = [];
+    const deps = {
+      ...test.deps,
+      fetchImpl: async (
+        input: Parameters<typeof fetch>[0],
+        init?: RequestInit,
+      ) => {
+        const url =
+          input instanceof URL
+            ? input
+            : new URL(
+                typeof input === "string" ? input : input.url,
+                "http://localhost",
+              );
+        if (
+          url.pathname === "/api/review-events/watch" &&
+          typeof init?.body === "string"
+        ) {
+          watchBodies.push(JSON.parse(init.body) as Record<string, unknown>);
+          if (watchBodies.length === 1) {
+            return new Response(
+              JSON.stringify({ events: [], timedOut: true, nextSequence: 7 }),
+              { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          return new Response(
+            JSON.stringify({
+              events: [{ type: "review.completed", documentPath, sequence: 7 }],
+              timedOut: false,
+              nextSequence: 8,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return test.deps.fetchImpl(input, init);
+      },
+    };
+
+    const exitCode = await runCli(
+      ["watch", documentPath, "--json", "--batch-window", "0"],
+      deps,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(watchBodies).toHaveLength(2);
+    expect(watchBodies[0]).toMatchObject({ fromNow: true });
+    expect(watchBodies[1]).toMatchObject({ fromNow: false, afterSequence: 6 });
+
+    const payload = parseOnlyJsonLog<{
+      timedOut: boolean;
+      events: unknown[];
+    }>(test.logs);
+    expect(payload.timedOut).toBe(false);
+    expect(payload.events).toHaveLength(1);
+  });
+
+  it("exits with a timeout when no review event arrives before --timeout", async () => {
+    const test = createTestDependencies();
+    const documentPath = path.join(projectDir, "draft.md");
+    fs.writeFileSync(documentPath, "# Draft\n");
+
+    const exitCode = await runCli(
+      [
+        "watch",
+        documentPath,
+        "--json",
+        "--timeout",
+        "1",
+        "--batch-window",
+        "0",
+      ],
+      test.deps,
+    );
+
+    const payload = parseOnlyJsonLog<{ timedOut: boolean }>(test.logs);
+    expect(exitCode).toBe(1);
+    expect(payload.timedOut).toBe(true);
   });
 
   it("cleans stale state during status checks", async () => {
