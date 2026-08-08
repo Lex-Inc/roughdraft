@@ -193,6 +193,40 @@ export function groupCommentAnchorMeasurements(
   );
 }
 
+/**
+ * Resolve anchored comment ids to the comments that belong with them, including
+ * replies that carry no inline marker.
+ *
+ * Anchor ids come from a `data-comment-ids` attribute or from the marks under
+ * the selection, both of which list only comments written inline. Replies
+ * stored in YAML endmatter have no marker by design, so without this they are
+ * parsed into `comments` and then dropped by every surface that renders from an
+ * anchor: they appear while being composed and vanish on reload.
+ */
+export function collectAnchoredThreadComments(
+  anchorCommentIds: string[],
+  comments: ReadonlyMap<string, CriticComment>,
+): CriticComment[] {
+  const collected = anchorCommentIds
+    .map((commentId) => comments.get(commentId))
+    .filter((comment): comment is CriticComment => Boolean(comment));
+
+  const seenCommentIds = new Set(collected.map((comment) => comment.id));
+  for (const commentId of [...seenCommentIds]) {
+    for (const descendantId of getCommentDescendantIds(commentId, comments)) {
+      if (seenCommentIds.has(descendantId)) continue;
+
+      const descendant = comments.get(descendantId);
+      if (!descendant) continue;
+
+      seenCommentIds.add(descendantId);
+      collected.push(descendant);
+    }
+  }
+
+  return collected;
+}
+
 export function buildCommentThreadRailItems(
   groups: CommentGroupAnchor[],
   comments: ReadonlyMap<string, CriticComment>,
@@ -200,29 +234,10 @@ export function buildCommentThreadRailItems(
   const items: CommentThreadRailItem[] = [];
 
   for (const group of groups) {
-    const visibleComments = group.commentIds
-      .map((commentId) => comments.get(commentId))
-      .filter((comment): comment is CriticComment => Boolean(comment));
-
-    // A group's ids come from the anchor's data-comment-ids, which only lists
-    // comments that carry an inline marker. Replies written to YAML endmatter
-    // have no marker, so they are parsed into `comments` but would never reach
-    // a rail item -- the reply renders while it is being composed and vanishes
-    // on the next reload. Pull each root's descendants back in.
-    const seenCommentIds = new Set(
-      visibleComments.map((comment) => comment.id),
+    const visibleComments = collectAnchoredThreadComments(
+      group.commentIds,
+      comments,
     );
-    for (const commentId of [...seenCommentIds]) {
-      for (const descendantId of getCommentDescendantIds(commentId, comments)) {
-        if (seenCommentIds.has(descendantId)) continue;
-
-        const descendant = comments.get(descendantId);
-        if (!descendant) continue;
-
-        seenCommentIds.add(descendantId);
-        visibleComments.push(descendant);
-      }
-    }
 
     if (visibleComments.length === 0) continue;
 
