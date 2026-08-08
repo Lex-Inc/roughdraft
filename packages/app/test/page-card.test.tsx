@@ -1675,6 +1675,40 @@ describe("PageCard editor integration", () => {
     expect(rendered.onSave).not.toHaveBeenCalled();
   });
 
+  it("opens a reply from a reply that has no inline anchor of its own", async () => {
+    const rendered = await renderPageCard({
+      page: {
+        id: "doc-comment-reply-to-endmatter-reply-1",
+        title: "Doc Comment Reply To Endmatter Reply 1",
+        // `child` lives only in the endmatter, so it carries no inline marker
+        // to anchor a nested reply against.
+        content: `{==alpha==}{>>Root comment<<}{#root}\n\nParagraph\n\n---\ncomments:\n  root:\n    by: user\n    at: "2026-04-25T23:56:00.000Z"\n  child:\n    body: Endmatter reply.\n    by: AI\n    at: "2026-04-25T23:57:00.000Z"\n    re: root\n`,
+      },
+      selected: true,
+    });
+
+    await selectText(rendered.getEditor(), "alpha");
+
+    const nestedReplyButton = getByTestId<HTMLButtonElement>(
+      rendered.container,
+      "comment-banner-child-action-reply",
+    );
+
+    await act(async () => {
+      nestedReplyButton.click();
+      await Promise.resolve();
+    });
+    await flushReact();
+    await flushReact();
+
+    // Before the anchor walk-up this returned null and no composer appeared.
+    const replyEditor = queryByTestId<HTMLTextAreaElement>(
+      rendered.container,
+      "comment-banner-c1-editor",
+    );
+    expect(replyEditor).not.toBeNull();
+  });
+
   it("deletes a whole root comment thread from the thread action", async () => {
     const rendered = await renderPageCard({
       page: {
