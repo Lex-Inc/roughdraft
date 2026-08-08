@@ -2,6 +2,7 @@ import {
   buildCommentThreads,
   type CriticComment,
   flattenCommentThreads,
+  getCommentDescendantIds,
 } from "./critic-markup";
 
 interface CommentAnchorMeasurement {
@@ -202,6 +203,26 @@ export function buildCommentThreadRailItems(
     const visibleComments = group.commentIds
       .map((commentId) => comments.get(commentId))
       .filter((comment): comment is CriticComment => Boolean(comment));
+
+    // A group's ids come from the anchor's data-comment-ids, which only lists
+    // comments that carry an inline marker. Replies written to YAML endmatter
+    // have no marker, so they are parsed into `comments` but would never reach
+    // a rail item -- the reply renders while it is being composed and vanishes
+    // on the next reload. Pull each root's descendants back in.
+    const seenCommentIds = new Set(
+      visibleComments.map((comment) => comment.id),
+    );
+    for (const commentId of [...seenCommentIds]) {
+      for (const descendantId of getCommentDescendantIds(commentId, comments)) {
+        if (seenCommentIds.has(descendantId)) continue;
+
+        const descendant = comments.get(descendantId);
+        if (!descendant) continue;
+
+        seenCommentIds.add(descendantId);
+        visibleComments.push(descendant);
+      }
+    }
 
     if (visibleComments.length === 0) continue;
 
