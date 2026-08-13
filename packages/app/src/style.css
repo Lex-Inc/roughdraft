@@ -795,10 +795,10 @@
 @media (min-width: 1100px) {
   .review-layout-grid {
     display: grid;
-    /* comments present: document on the left, fixed-width rail on the right */
+    /* comments present: document fills the available width, fixed-width rail on the right */
     --review-rail-width: 18rem;
-    grid-template-columns: minmax(0, 46.5rem) var(--review-rail-width);
-    justify-content: center;
+    grid-template-columns: minmax(0, 1fr) var(--review-rail-width);
+    justify-content: stretch;
     align-items: start;
     column-gap: 2rem;
   }

@@ -96,14 +96,14 @@ test.describe("CriticMarkup review flows", () => {
     });
   });
 
-  test("animates the document layout when the review rail appears and disappears @smoke", async ({
+  test("keeps the document anchored when the review rail appears and disappears @smoke", async ({
     page,
   }) => {
     const filePath = writeProjectFile(
       projectDir,
-      "layout-animation.md",
+      "layout-shift.md",
       [
-        "# Layout Animation",
+        "# Layout Shift",
         "",
         "This paragraph has target text to review.",
         "",
@@ -111,28 +111,55 @@ test.describe("CriticMarkup review flows", () => {
     );
 
     await openMarkdownFile(page, filePath);
+
+    const card = page.getByTestId("document-content-card");
+    const header = page.getByTestId("document-page-header");
+    const before = await card.boundingBox();
+    const headerBefore = await header.boundingBox();
+    if (!before || !headerBefore) {
+      throw new Error("Could not measure the document layout");
+    }
+    // The document and its toolbar share the same left edge.
+    expect(Math.abs(headerBefore.x - before.x)).toBeLessThan(2);
+
     await selectRichText(page, "target text");
-    await page.getByTestId("selection-menu-action-comment").waitFor();
-
-    const addSamplesPromise = sampleReviewLayoutAnimation(page);
     await page.getByTestId("selection-menu-action-comment").click();
-    const addSamples = await addSamplesPromise;
+    await page.getByTestId("comment-rail-c1-editor").waitFor();
+    await settleLayout(page);
 
-    expect(hasAnimatedReviewLayout(addSamples)).toBe(true);
+    const withRail = await card.boundingBox();
+    const headerWithRail = await header.boundingBox();
+    if (!withRail || !headerWithRail) {
+      throw new Error("Could not measure the document layout with the rail");
+    }
+    // The document stays anchored to the same left gutter (no horizontal jump)
+    // and simply narrows to make room for the review rail on the right.
+    expect(Math.abs(withRail.x - before.x)).toBeLessThan(2);
+    expect(Math.abs(headerWithRail.x - before.x)).toBeLessThan(2);
+    expect(withRail.width).toBeLessThan(before.width - 100);
+
     await page
       .getByTestId("comment-rail-c1-editor")
       .fill("Clarify this phrase.");
     await page.getByTestId("comment-rail-c1-action-save").click();
 
     await page.getByTestId("comment-rail-c1-action-delete-thread").waitFor();
-    const removeSamplesPromise = sampleReviewLayoutAnimation(page);
     await page.getByTestId("comment-rail-c1-action-delete-thread").click();
-    const removeSamples = await removeSamplesPromise;
+    await expect(page.getByTestId("comment-rail-c1-editor")).toHaveCount(0);
+    await settleLayout(page);
 
-    expect(hasAnimatedReviewLayout(removeSamples)).toBe(true);
+    const afterRemove = await card.boundingBox();
+    if (!afterRemove) {
+      throw new Error("Could not measure the document layout after removal");
+    }
+    // Removing the rail restores the full-width document without shifting it.
+    expect(Math.abs(afterRemove.x - before.x)).toBeLessThan(2);
+    expect(Math.abs(afterRemove.width - before.width)).toBeLessThan(2);
 
-    logE2eEvent("criticmarkup.layout-animation", {
-      file: "layout-animation.md",
+    logE2eEvent("criticmarkup.layout-shift", {
+      file: "layout-shift.md",
+      widthWithRail: Math.round(withRail.width),
+      widthWithoutRail: Math.round(before.width),
     });
   });
 
@@ -211,54 +238,15 @@ test.describe("CriticMarkup review flows", () => {
   });
 });
 
-type ReviewLayoutAnimationSample = {
-  shellAnimating: boolean;
-  headerAnimating: boolean;
-  shellTranslateX: number;
-  headerTranslateX: number;
-};
-
-async function sampleReviewLayoutAnimation(page: Page) {
-  return page.evaluate(async () => {
-    const readTranslateX = (element: Element | null) => {
-      if (!(element instanceof HTMLElement)) return 0;
-      const transform = getComputedStyle(element).transform;
-      if (transform === "none") return 0;
-      return new DOMMatrixReadOnly(transform).m41;
-    };
-    const samples: ReviewLayoutAnimationSample[] = [];
-    const start = performance.now();
-
-    while (performance.now() - start < 500) {
-      const shell = document.querySelector(
-        '[data-testid="document-page-shell"]',
-      );
-      const header = document.querySelector(
-        '[data-testid="document-page-header"]',
-      );
-      samples.push({
-        shellAnimating:
-          shell instanceof HTMLElement &&
-          shell.classList.contains("review-layout-grid--animating"),
-        headerAnimating:
-          header instanceof HTMLElement &&
-          header.classList.contains("review-layout-grid--animating"),
-        shellTranslateX: readTranslateX(shell),
-        headerTranslateX: readTranslateX(header),
-      });
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-    }
-
-    return samples;
-  });
-}
-
-function hasAnimatedReviewLayout(samples: ReviewLayoutAnimationSample[]) {
-  return samples.some(
-    (sample) =>
-      sample.shellAnimating &&
-      sample.headerAnimating &&
-      Math.abs(sample.shellTranslateX) > 1 &&
-      Math.abs(sample.headerTranslateX) > 1,
+// Let the review-layout FLIP transition (and any comment UI mount) settle so
+// geometry reads are stable before measuring.
+async function settleLayout(page: Page) {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          setTimeout(() => requestAnimationFrame(() => resolve()), 300);
+        });
+      }),
   );
 }
