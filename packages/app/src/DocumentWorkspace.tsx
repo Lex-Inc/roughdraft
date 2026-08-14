@@ -15,6 +15,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DocumentEditorViewMode } from "./app-navigation";
 import { RemoteSessionBanner } from "./components/RemoteSessionBanner";
+import { DocumentWidthToggle } from "./DocumentWidthToggle";
 import { Button } from "./components/ui/button";
 import {
   Popover,
@@ -1029,6 +1030,7 @@ export function DocumentWorkspace({
                   />
                   <TooltipContent>{editorViewModeToggleLabel}</TooltipContent>
                 </Tooltip>
+                <DocumentWidthToggle />
                 <Popover
                   open={fileCopyMenuOpen}
                   onOpenChange={setFileCopyMenuOpen}

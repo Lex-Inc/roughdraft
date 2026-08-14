@@ -113,7 +113,8 @@ suggestions:
 | Preview | Rich text default | `/preview?editor=rich-text` | `page-card-rich-text`, `rich-text-editor` | Uses in-memory preview backend and includes a sample anchored comment. |
 | Preview | Code editor default | `/preview?editor=code` | `page-card-code`, `markdown-code-editor` | Capture line wrapping, code editor chrome, and rail behavior. |
 | Document | Rich/code toggle | Use `document-editor-view-toggle` | `document-editor-view-toggle` | URL changes to `?editor=code` or `?editor=rich-text`. |
-| Document | Wide content width | Open a local file at a wide desktop viewport (≥1100px) | `document-scroll-region`, `document-content-card` | Document fills ~90% of the available width with ~5% side gutters. Adding/removing the review rail narrows/restores the document without shifting its left edge. |
+| Document | Width: full (default) | Open a local file at a wide desktop viewport (≥1100px) | `document-scroll-region`, `document-content-card`, `document-width-toggle` | Default. Document fills ~90% of the available width with ~5% side gutters. Adding/removing the review rail narrows/restores the document without shifting its left edge. |
+| Document | Width: comfortable | Click `document-width-toggle` (or set `localStorage['roughdraft:document-width'] = 'comfortable'`) | `document-width-toggle`, `document-content-card` | Classic centered ~46.5rem reading column. The `data-doc-width` attribute on `<html>` drives the layout; the choice persists across reloads and windows. |
 | Document | Editing mode | Open mode menu and choose Editing | `document-mode-trigger` | Normal edit behavior. |
 | Document | Suggesting mode | Open mode menu and choose Suggesting | `document-mode-trigger` | Selection actions should create suggestions instead of direct edits. |
 | Document | Viewing mode | Open mode menu and choose Viewing | `document-mode-trigger` | Editing controls should look non-editable. |

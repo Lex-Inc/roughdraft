@@ -87,4 +87,65 @@ test.describe("document content width", () => {
       widthRatio: Number(widthRatio.toFixed(3)),
     });
   });
+
+  test("lets the reader switch to a comfortable column and remembers it @smoke", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    const filePath = writeProjectFile(
+      projectDir,
+      "toggle.md",
+      ["# Width toggle", "", "Some prose to measure.", ""].join("\n"),
+    );
+
+    await openMarkdownFile(page, filePath);
+    await expect(richTextEditor(page)).toContainText("Width toggle");
+
+    const card = page.getByTestId("document-content-card");
+    const region = page.getByTestId("document-scroll-region");
+    const toggle = page.getByTestId("document-width-toggle");
+
+    // Default is wide: the document fills most of the width.
+    const wide = await card.boundingBox();
+    if (!wide) throw new Error("Could not measure the wide document");
+    expect(wide.width).toBeGreaterThan(1100);
+
+    // Switch to the comfortable column.
+    await toggle.click();
+    await expect
+      .poll(async () => (await card.boundingBox())?.width ?? 0)
+      .toBeLessThan(780);
+
+    const comfy = await card.boundingBox();
+    const regionBox = await region.boundingBox();
+    if (!comfy || !regionBox) {
+      throw new Error("Could not measure the comfortable document");
+    }
+    // Classic ~46.5rem (~744px) reading column, centered in the region.
+    expect(comfy.width).toBeGreaterThan(700);
+    expect(comfy.width).toBeLessThan(780);
+    const leftGap = comfy.x - regionBox.x;
+    const rightGap = regionBox.x + regionBox.width - (comfy.x + comfy.width);
+    expect(Math.abs(leftGap - rightGap)).toBeLessThan(24);
+
+    // The preference survives a reload.
+    await page.reload();
+    await expect(richTextEditor(page)).toContainText("Width toggle");
+    await expect
+      .poll(async () => (await card.boundingBox())?.width ?? 0)
+      .toBeLessThan(780);
+
+    // And can be switched back to wide.
+    await toggle.click();
+    await expect
+      .poll(async () => (await card.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(1100);
+
+    logE2eEvent("content-width.toggle", {
+      file: "toggle.md",
+      wideWidth: Math.round(wide.width),
+      comfortableWidth: Math.round(comfy.width),
+    });
+  });
 });

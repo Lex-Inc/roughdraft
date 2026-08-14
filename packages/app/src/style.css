@@ -819,6 +819,24 @@
   }
 }
 
+/*
+ * Comfortable width preference: restore the classic centered ~46.5rem reading
+ * column. The default (wide) layout above lets the document fill the available
+ * width; this opt-in caps and centers it instead. Toggled via the document
+ * width control, persisted as `data-doc-width` on the root (see document-width.ts).
+ */
+:root[data-doc-width="comfortable"] .review-layout-main {
+  max-width: 46.5rem;
+  margin-inline: auto;
+}
+
+@media (min-width: 1100px) {
+  :root[data-doc-width="comfortable"] .review-layout-grid {
+    grid-template-columns: minmax(0, 46.5rem) var(--review-rail-width);
+    justify-content: center;
+  }
+}
+
 .review-layout-grid.review-layout-grid--animating {
   transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1);
   will-change: transform;
