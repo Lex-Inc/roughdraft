@@ -5,14 +5,17 @@ import {
   openMarkdownFile,
   removeMarkdownProject,
   richTextEditor,
+  seedDocumentWidth,
   writeProjectFile,
 } from "./helpers";
 
 /**
- * The rendered document should cover most of the available width, leaving a
- * ~5% gutter on the left and right, so wide content (e.g. ASCII diagrams in
- * fenced code blocks) has room instead of being squeezed into a fixed narrow
- * column. See the widened `.review-layout-grid` document column.
+ * With the "wide" width preference the rendered document should cover most of
+ * the available width, leaving a ~5% gutter on the left and right, so wide
+ * content (e.g. ASCII diagrams in fenced code blocks) has room instead of being
+ * squeezed into a fixed narrow column. The default preference is "comfortable"
+ * (a centered ~46.5rem column); the toggle test below covers switching and
+ * persistence.
  */
 test.describe("document content width", () => {
   let projectDir: string;
@@ -29,6 +32,7 @@ test.describe("document content width", () => {
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
+    await seedDocumentWidth(page, "wide");
 
     const filePath = writeProjectFile(
       projectDir,
@@ -88,7 +92,7 @@ test.describe("document content width", () => {
     });
   });
 
-  test("lets the reader switch to a comfortable column and remembers it @smoke", async ({
+  test("lets the reader switch document width and remembers it @smoke", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -106,46 +110,43 @@ test.describe("document content width", () => {
     const region = page.getByTestId("document-scroll-region");
     const toggle = page.getByTestId("document-width-toggle");
 
-    // Default is wide: the document fills most of the width.
-    const wide = await card.boundingBox();
-    if (!wide) throw new Error("Could not measure the wide document");
-    expect(wide.width).toBeGreaterThan(1100);
-
-    // Switch to the comfortable column.
-    await toggle.click();
-    await expect
-      .poll(async () => (await card.boundingBox())?.width ?? 0)
-      .toBeLessThan(780);
-
+    // Default is the comfortable column: a centered ~46.5rem (~744px) column.
     const comfy = await card.boundingBox();
     const regionBox = await region.boundingBox();
     if (!comfy || !regionBox) {
       throw new Error("Could not measure the comfortable document");
     }
-    // Classic ~46.5rem (~744px) reading column, centered in the region.
     expect(comfy.width).toBeGreaterThan(700);
     expect(comfy.width).toBeLessThan(780);
     const leftGap = comfy.x - regionBox.x;
     const rightGap = regionBox.x + regionBox.width - (comfy.x + comfy.width);
     expect(Math.abs(leftGap - rightGap)).toBeLessThan(24);
 
+    // Switch to the full-width layout.
+    await toggle.click();
+    await expect
+      .poll(async () => (await card.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(1100);
+    const wide = await card.boundingBox();
+    if (!wide) throw new Error("Could not measure the wide document");
+
     // The preference survives a reload.
     await page.reload();
     await expect(richTextEditor(page)).toContainText("Width toggle");
     await expect
       .poll(async () => (await card.boundingBox())?.width ?? 0)
-      .toBeLessThan(780);
+      .toBeGreaterThan(1100);
 
-    // And can be switched back to wide.
+    // And can be switched back to the comfortable column.
     await toggle.click();
     await expect
       .poll(async () => (await card.boundingBox())?.width ?? 0)
-      .toBeGreaterThan(1100);
+      .toBeLessThan(780);
 
     logE2eEvent("content-width.toggle", {
       file: "toggle.md",
-      wideWidth: Math.round(wide.width),
       comfortableWidth: Math.round(comfy.width),
+      wideWidth: Math.round(wide.width),
     });
   });
 });

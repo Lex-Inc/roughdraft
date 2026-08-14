@@ -5,6 +5,7 @@ import {
   openMarkdownFile,
   readProjectFile,
   removeMarkdownProject,
+  seedDocumentWidth,
   selectRichText,
   writeProjectFile,
 } from "./helpers";
@@ -99,6 +100,10 @@ test.describe("CriticMarkup review flows", () => {
   test("keeps the document anchored when the review rail appears and disappears @smoke", async ({
     page,
   }) => {
+    // The full-width layout anchors the document to the left gutter; this test
+    // exercises that behavior, so pin the preference rather than the default.
+    await seedDocumentWidth(page, "wide");
+
     const filePath = writeProjectFile(
       projectDir,
       "layout-shift.md",

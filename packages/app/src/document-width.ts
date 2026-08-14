@@ -14,7 +14,7 @@ import { useSyncExternalStore } from "react";
 export type DocumentWidth = "comfortable" | "wide";
 
 const STORAGE_KEY = "roughdraft:document-width";
-const DEFAULT_WIDTH: DocumentWidth = "wide";
+const DEFAULT_WIDTH: DocumentWidth = "comfortable";
 
 export function isDocumentWidth(value: unknown): value is DocumentWidth {
   return value === "comfortable" || value === "wide";

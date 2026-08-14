@@ -15,21 +15,21 @@ beforeEach(() => {
 });
 
 describe("document width preference", () => {
-  it("defaults to wide when nothing is stored", async () => {
+  it("defaults to comfortable when nothing is stored", async () => {
     const { readStoredDocumentWidth } = await loadModule();
-    expect(readStoredDocumentWidth()).toBe("wide");
+    expect(readStoredDocumentWidth()).toBe("comfortable");
   });
 
   it("reads a stored preference", async () => {
-    localStorage.setItem(STORAGE_KEY, "comfortable");
+    localStorage.setItem(STORAGE_KEY, "wide");
     const { readStoredDocumentWidth } = await loadModule();
-    expect(readStoredDocumentWidth()).toBe("comfortable");
+    expect(readStoredDocumentWidth()).toBe("wide");
   });
 
   it("falls back to the default for an unknown stored value", async () => {
     localStorage.setItem(STORAGE_KEY, "medium");
     const { readStoredDocumentWidth } = await loadModule();
-    expect(readStoredDocumentWidth()).toBe("wide");
+    expect(readStoredDocumentWidth()).toBe("comfortable");
   });
 
   it("validates width values", async () => {

@@ -38,6 +38,21 @@ export async function openMarkdownFile(
   await page.goto(`/?${params.toString()}`);
 }
 
+/**
+ * Seed the persisted document-width preference before the app loads, so a test
+ * can pin the layout mode it exercises instead of depending on the default.
+ * Runs on every navigation in the context, so avoid it when asserting that a
+ * toggled preference persists across a reload.
+ */
+export async function seedDocumentWidth(
+  page: Page,
+  width: "comfortable" | "wide",
+) {
+  await page.addInitScript((value) => {
+    window.localStorage.setItem("roughdraft:document-width", value);
+  }, width);
+}
+
 export function codeEditor(page: Page) {
   return page.getByTestId("markdown-code-editor").locator(".cm-content");
 }
