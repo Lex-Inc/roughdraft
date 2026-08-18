@@ -795,10 +795,10 @@
 @media (min-width: 1100px) {
   .review-layout-grid {
     display: grid;
-    /* comments present: document on the left, fixed-width rail on the right */
+    /* comments present: document fills the available width, fixed-width rail on the right */
     --review-rail-width: 18rem;
-    grid-template-columns: minmax(0, 46.5rem) var(--review-rail-width);
-    justify-content: center;
+    grid-template-columns: minmax(0, 1fr) var(--review-rail-width);
+    justify-content: stretch;
     align-items: start;
     column-gap: 2rem;
   }
@@ -816,6 +816,24 @@
   .review-layout-grid > .review-layout-rail {
     grid-column: 2;
     min-width: 0;
+  }
+}
+
+/*
+ * Comfortable width preference: restore the classic centered ~46.5rem reading
+ * column. The default (wide) layout above lets the document fill the available
+ * width; this opt-in caps and centers it instead. Toggled via the document
+ * width control, persisted as `data-doc-width` on the root (see document-width.ts).
+ */
+:root[data-doc-width="comfortable"] .review-layout-main {
+  max-width: 46.5rem;
+  margin-inline: auto;
+}
+
+@media (min-width: 1100px) {
+  :root[data-doc-width="comfortable"] .review-layout-grid {
+    grid-template-columns: minmax(0, 46.5rem) var(--review-rail-width);
+    justify-content: center;
   }
 }
 
