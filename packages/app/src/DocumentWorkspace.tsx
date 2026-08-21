@@ -424,6 +424,7 @@ export function DocumentWorkspace({
   const [reviewHandoffState, setReviewHandoffState] =
     useState<ReviewHandoffState>("idle");
   const [reviewWatcherCount, setReviewWatcherCount] = useState(0);
+  const [reviewWatcherSeen, setReviewWatcherSeen] = useState(false);
   const [reviewHandoffPopoverOpen, setReviewHandoffPopoverOpen] =
     useState(false);
   const [reviewCompleteTitle, setReviewCompleteTitle] = useState(() =>
@@ -470,6 +471,7 @@ export function DocumentWorkspace({
     setReviewHandoffState("idle");
     setReviewHandoffPopoverOpen(false);
     setDocumentChangedSinceOpen(false);
+    setReviewWatcherSeen(false);
     const readyTimer = window.setTimeout(() => {
       documentChangeTrackingReadyRef.current = true;
     }, 0);
@@ -487,7 +489,11 @@ export function DocumentWorkspace({
       try {
         const status = await backend.getReviewWatchStatus?.(activeDocumentPath);
         if (!cancelled) {
-          setReviewWatcherCount(status?.watcherCount ?? 0);
+          const count = status?.watcherCount ?? 0;
+          setReviewWatcherCount(count);
+          if (count > 0) {
+            setReviewWatcherSeen(true);
+          }
         }
       } catch {
         if (!cancelled) {
@@ -675,7 +681,9 @@ export function DocumentWorkspace({
       : conflictNoticeCopy[documentDiskChangeState];
   const showReviewHandoffButton =
     !!activeDocumentPath &&
-    (reviewWatcherCount > 0 || reviewHandoffState !== "idle");
+    (reviewWatcherCount > 0 ||
+      reviewWatcherSeen ||
+      reviewHandoffState !== "idle");
   const reviewHandoffButtonLabel = getReviewHandoffButtonLabel({
     reviewHandoffState,
     documentChangedSinceOpen,
