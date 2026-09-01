@@ -6,6 +6,7 @@ import {
   extractRoughdraftReviewIndex,
   markRoughdraftResolved,
 } from "@roughdraft/rfm";
+import { getReviewWatchDispatcher } from "./network.js";
 
 interface JsonRpcRequest {
   jsonrpc?: "2.0";
@@ -296,7 +297,8 @@ export async function callTool(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
-      },
+        dispatcher: getReviewWatchDispatcher(),
+      } as Parameters<typeof fetch>[1],
     );
     if (!response.ok) {
       throw new Error(`Review watch failed: ${response.status}`);

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateRoughdraftMarkdown } from "@roughdraft/rfm";
+import { Agent } from "undici";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createCliDependencies,
@@ -1019,6 +1020,85 @@ describe("cli", () => {
       overallComment: "Please prioritize the CLI contract.",
       type: "review.completed",
     });
+  });
+
+  it("watch without --timeout survives response headers arriving after the dispatcher default headers timeout", {
+    timeout: 20000,
+  }, async () => {
+    const shortDefaultAgent = new Agent({
+      headersTimeout: 500,
+      bodyTimeout: 500,
+    });
+
+    try {
+      const test = createTestDependencies();
+      const documentPath = path.join(projectDir, "draft.md");
+      fs.writeFileSync(documentPath, "# Draft\n");
+      const deps = {
+        ...test.deps,
+        fetchImpl: async (input: Parameters<typeof fetch>[0], init) => {
+          const url =
+            input instanceof URL
+              ? input
+              : new URL(
+                  typeof input === "string" ? input : input.url,
+                  "http://localhost",
+                );
+
+          if (url.pathname === "/api/review-events/watch") {
+            return test.deps.fetchImpl(input, {
+              ...init,
+              dispatcher:
+                (init as { dispatcher?: unknown })?.dispatcher ??
+                shortDefaultAgent,
+            } as Parameters<typeof fetch>[1]);
+          }
+
+          return test.deps.fetchImpl(input, init);
+        },
+      };
+
+      const watchPromise = runCli(
+        ["watch", documentPath, "--json", "--batch-window", "0"],
+        deps,
+      );
+
+      let persisted: { port: number } | null = null;
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        const stateFile = getServerStateFilePath(test.deps.env);
+        if (fs.existsSync(stateFile)) {
+          persisted = JSON.parse(fs.readFileSync(stateFile, "utf8")) as {
+            port: number;
+          };
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+
+      expect(persisted).not.toBeNull();
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+      await fetch(`http://localhost:${persisted?.port}/api/review-events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectPath: projectDir, path: "draft.md" }),
+      });
+
+      const exitCode = await watchPromise;
+      const payload = parseOnlyJsonLog<{
+        timedOut: boolean;
+        events: Array<{ documentPath: string; type: string }>;
+      }>(test.logs);
+
+      expect(exitCode).toBe(0);
+      expect(payload.timedOut).toBe(false);
+      expect(payload.events).toHaveLength(1);
+      expect(payload.events[0]).toMatchObject({
+        documentPath,
+        type: "review.completed",
+      });
+    } finally {
+      await shortDefaultAgent.close();
+    }
   });
 
   it("opens a document and waits for the next review event by default from open --json", async () => {

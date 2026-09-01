@@ -1,15 +1,16 @@
+import { spawn, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawn, spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 import {
   type RfmDiagnostic,
   validateRoughdraftMarkdown,
 } from "@roughdraft/rfm";
 import {
+  getReviewWatchDispatcher,
   ROUGHDRAFT_BIND_HOST,
   ROUGHDRAFT_DEFAULT_PORT,
   ROUGHDRAFT_LOOPBACK_HOSTS,
@@ -2139,10 +2140,11 @@ async function runWatch(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      dispatcher: getReviewWatchDispatcher(),
       ...(options.timeoutSeconds !== undefined
         ? { signal: AbortSignal.timeout((options.timeoutSeconds + 5) * 1000) }
         : {}),
-    },
+    } as Parameters<typeof fetch>[1],
   );
 
   if (!response.ok) {
