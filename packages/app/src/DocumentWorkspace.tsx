@@ -976,7 +976,8 @@ export function DocumentWorkspace({
           </div>
         </div>
       ) : null}
-      <div className="mx-auto min-h-full max-w-[1080px]">
+      {/* 46.5rem writing column + 2rem gap + 30rem review rail. */}
+      <div className="mx-auto min-h-full max-w-[78.5rem]">
         {documentPage ? (
           <div
             ref={documentHeaderRef}
