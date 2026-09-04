@@ -136,6 +136,46 @@ test.describe("CriticMarkup review flows", () => {
     });
   });
 
+  test("widens the review rail on very large displays without widening the writing column", async ({
+    page,
+  }) => {
+    const filePath = writeProjectFile(
+      projectDir,
+      "wide-review-rail.md",
+      [
+        "# Wide Review Rail",
+        "",
+        'This paragraph has {==target text==}{>>This is a long review comment whose line length should make better use of the space available on a very large desktop display.<<}{id="c1" by="user" at="2026-04-23T18:00:00.000Z"}.',
+        "",
+      ].join("\n"),
+    );
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openMarkdownFile(page, filePath);
+    const reviewRail = page.getByTestId("document-review-rail");
+    const writingColumn = page.getByTestId("document-page-main");
+    await expect(reviewRail).toBeVisible();
+    const standardRailWidth = (await reviewRail.boundingBox())?.width;
+    const standardWritingWidth = (await writingColumn.boundingBox())?.width;
+
+    expect(standardRailWidth).toBeCloseTo(288, 0);
+    expect(standardWritingWidth).toBeCloseTo(744, 0);
+
+    await page.setViewportSize({ width: 2560, height: 1440 });
+    const largeRailWidth = (await reviewRail.boundingBox())?.width;
+    const largeWritingWidth = (await writingColumn.boundingBox())?.width;
+
+    expect(largeRailWidth).toBeCloseTo(480, 0);
+    expect(largeWritingWidth).toBeCloseTo(standardWritingWidth ?? 0, 0);
+
+    logE2eEvent("criticmarkup.wide-review-rail", {
+      standardRailWidth,
+      standardWritingWidth,
+      largeRailWidth,
+      largeWritingWidth,
+    });
+  });
+
   test("shows tooltips for selection menu formatting actions", async ({
     page,
   }) => {

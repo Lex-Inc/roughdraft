@@ -795,8 +795,9 @@
 @media (min-width: 1100px) {
   .review-layout-grid {
     display: grid;
-    /* comments present: document on the left, fixed-width rail on the right */
-    --review-rail-width: 18rem;
+    /* Keep laptop layouts compact, then cap long comments near a 65-character
+     * measure after accounting for the rail padding and avatar gutter. */
+    --review-rail-width: clamp(18rem, 20vw, 30rem);
     grid-template-columns: minmax(0, 46.5rem) var(--review-rail-width);
     justify-content: center;
     align-items: start;

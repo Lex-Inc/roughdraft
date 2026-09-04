@@ -1916,7 +1916,7 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
         data-testid="document-page-shell"
         className={documentShellClass}
       >
-        <div className={documentMainClass}>
+        <div data-testid="document-page-main" className={documentMainClass}>
           {activeComments.length > 0 ? (
             <CommentEditorList
               comments={activeComments}
@@ -2069,7 +2069,7 @@ const CodeEditorSurface = memo(function CodeEditorSurface({
         data-testid="document-page-shell"
         className={documentShellClass}
       >
-        <div className={documentMainClass}>
+        <div data-testid="document-page-main" className={documentMainClass}>
           <div className={contentInsetClass}>
             <div
               className="min-h-[calc(70vh+4rem)] rounded-[0.75rem] border border-[#E9E9E8] dark:border-slate-800 bg-white dark:bg-card py-10 pr-6 pl-5 shadow-[0_18px_44px_rgba(57,47,38,0.08)] dark:shadow-[0_18px_44px_rgba(0,0,0,0.35)] sm:py-14 sm:pr-10 sm:pl-8"
