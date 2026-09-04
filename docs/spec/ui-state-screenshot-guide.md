@@ -141,6 +141,8 @@ suggestions:
 | Comment editor | New root comment draft | Select text and choose Add comment | `comment-rail-c1-editor`, `comment-rail-c1-action-save` | Save uses the popover-style button; footer Cancel is absent because the thread trash action dismisses the draft. |
 | Comment editor | Root comment editing | Use a comment card edit action | `comment-rail-root-editor` | Comment test IDs follow `comment-${variant}-${id}-...`. |
 | Comment editor | Reply editing | Use a reply action | `comment-rail-child-editor` | Useful for nested thread spacing. |
+| Comment dock | Docked composer | Narrow the viewport below 1100px, then select text and choose Add comment | `document-comment-dock`, `document-comment-dock-panel`, `comment-banner-c1-editor` | Below the review-rail breakpoint the composer docks to the bottom of the viewport instead of stacking above the document. Capture it over a scrolled document so the gutter alignment with the document column is visible. |
+| Comment dock | Dock clears the highlight | Comment on text sitting behind the dock | `document-comment-dock`, `.comment-anchor[data-comment-ids]` | The document nudges up by the minimum needed; the highlight should stay visible above the dock. |
 | Code mode | Review rail present | Open review fixture with `?editor=code` | `page-card-code`, `markdown-code-editor` | Confirms code editor and rail can coexist. |
 | Code mode | Review rail absent | Open fenced fixture with `?editor=code` | `page-card-code`, `markdown-code-editor` | Confirms fenced CriticMarkup alone does not create review rail. |
 | Error/home fallback | Non-Markdown path | Open URL with `?path=/tmp/file.txt` | homepage error message | Copy: `Roughdraft now opens one .md file at a time.` |

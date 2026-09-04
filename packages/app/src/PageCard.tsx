@@ -3,9 +3,18 @@ import type { Mark as ProseMirrorMark } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { CommentEditorList } from "./CommentEditorList";
+import { getDockClearanceScrollDelta } from "./comment-dock";
 import {
   type CriticChangeAttrs,
   type CriticComment,
@@ -625,6 +634,9 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
     string | null
   >(null);
   const [newCommentDraftIds, setNewCommentDraftIds] = useState<string[]>([]);
+  const commentDockRef = useRef<HTMLDivElement | null>(null);
+  const dockClearanceCommentIdRef = useRef<string | null>(null);
+  const [commentDockHeight, setCommentDockHeight] = useState(0);
 
   const resolveFileUrl = useCallback(
     (path: string) => backend.resolveFileUrl(path),
@@ -1496,6 +1508,7 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
 
     setSelectedCommentId(comment.id);
     setPendingFocusCommentId(comment.id);
+    dockClearanceCommentIdRef.current = comment.id;
     requestAnimationFrame(() => {
       measureLayout();
     });
@@ -1876,6 +1889,89 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
   const activeComments = activeCommentIds
     .map((commentId) => comments.get(commentId))
     .filter((comment): comment is CriticComment => Boolean(comment));
+  // The embedded demo keeps its rail in flow at every width, so it never docks.
+  const hasDockedComments =
+    activeComments.length > 0 && layout !== "embedded-demo";
+
+  // The dock is hidden by CSS above the review-rail breakpoint, so a measured
+  // height of zero doubles as "the anchored rail is showing instead".
+  useEffect(() => {
+    const dock = commentDockRef.current;
+
+    if (!dock || !hasDockedComments) {
+      setCommentDockHeight(0);
+      return;
+    }
+
+    const measure = () => {
+      setCommentDockHeight(Math.ceil(dock.getBoundingClientRect().height));
+    };
+
+    measure();
+
+    const resizeObserver = new ResizeObserver(measure);
+    resizeObserver.observe(dock);
+    window.addEventListener("resize", measure);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [hasDockedComments]);
+
+  // Keep the highlight the reviewer just commented on visible above the dock,
+  // scrolling by the smallest amount that clears it.
+  //
+  // This runs after every commit rather than keying off state: the id is
+  // cleared as soon as the composer takes focus, which happens before the dock
+  // has been measured and before the document has grown its matching bottom
+  // padding.
+  useLayoutEffect(() => {
+    const commentId = dockClearanceCommentIdRef.current;
+    if (!commentId) return;
+
+    const dock = commentDockRef.current;
+    if (!dock || !hasDockedComments) {
+      dockClearanceCommentIdRef.current = null;
+      return;
+    }
+
+    if (commentDockHeight === 0) {
+      // A dock that is laid out but unmeasured gets another commit; a dock with
+      // no box at all means the anchored rail is showing instead.
+      if (dock.getBoundingClientRect().height === 0) {
+        dockClearanceCommentIdRef.current = null;
+      }
+      return;
+    }
+
+    dockClearanceCommentIdRef.current = null;
+
+    const scrollContainer = dock.closest<HTMLElement>(
+      "[data-document-scroll-container]",
+    );
+    const anchor = [
+      ...document.querySelectorAll<HTMLElement>(
+        ".comment-anchor[data-comment-ids]",
+      ),
+    ].find((element) =>
+      parseCommentIds(element.dataset.commentIds).includes(commentId),
+    );
+
+    if (!scrollContainer || !anchor) return;
+
+    const anchorRect = anchor.getBoundingClientRect();
+    const delta = getDockClearanceScrollDelta({
+      anchorTop: anchorRect.top,
+      anchorBottom: anchorRect.bottom,
+      dockTop: dock.getBoundingClientRect().top,
+      viewportTop: scrollContainer.getBoundingClientRect().top,
+    });
+
+    if (delta === 0) return;
+
+    scrollContainer.scrollBy({ top: delta, behavior: "auto" });
+  });
   const contentCardClass =
     "rounded-[0.75rem] border border-[#E9E9E8] dark:border-slate-800 bg-white dark:bg-card shadow-[0_18px_44px_rgba(57,47,38,0.08)] dark:shadow-[0_18px_44px_rgba(0,0,0,0.35)]";
   const documentShellClass = cn(
@@ -1895,10 +1991,6 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
       : "review-layout-main max-w-[46.5rem]",
   );
   const contentInsetClass = layout === "embedded-demo" ? "pb-0" : "pb-24";
-  const fallbackClass = cn(
-    "document-comment-fallback mb-4",
-    layout === "embedded-demo" ? "hidden" : "min-[1100px]:hidden",
-  );
   const reviewRailClass = cn(
     "document-comment-rail",
     layout === "embedded-demo"
@@ -1917,33 +2009,14 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
         className={documentShellClass}
       >
         <div className={documentMainClass}>
-          {activeComments.length > 0 ? (
-            <CommentEditorList
-              comments={activeComments}
-              className={fallbackClass}
-              testId="document-comment-fallback"
-              selectedCommentId={selectedCommentId}
-              hoveredCommentId={hoveredCommentId}
-              onDeleteComment={deleteComment}
-              onUpdateComment={(commentId, nextContent) => {
-                updateComment(commentId, (current) => ({
-                  ...current,
-                  content: nextContent,
-                }));
-              }}
-              onReplyComment={replyToComment}
-              onSelectComment={selectComment}
-              onHoverComment={setHoveredCommentId}
-              pendingFocusCommentId={pendingFocusCommentId}
-              newCommentDraftIds={newCommentDraftIds}
-              onAutoFocusComment={(commentId) => {
-                setPendingFocusCommentId((current) =>
-                  current === commentId ? null : current,
-                );
-              }}
-            />
-          ) : null}
-          <div className={contentInsetClass}>
+          <div
+            className={contentInsetClass}
+            style={
+              commentDockHeight > 0
+                ? { paddingBottom: commentDockHeight + 24 }
+                : undefined
+            }
+          >
             <div
               data-testid="document-content-card"
               className={cn(contentCardClass, "px-10 py-10 sm:px-14 sm:py-14")}
@@ -2025,6 +2098,38 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
           editor={editor}
         />
       </div>
+      {hasDockedComments ? (
+        <div
+          ref={commentDockRef}
+          className="document-comment-dock"
+          data-testid="document-comment-dock"
+        >
+          <CommentEditorList
+            comments={activeComments}
+            className="document-comment-dock-panel"
+            testId="document-comment-dock-panel"
+            selectedCommentId={selectedCommentId}
+            hoveredCommentId={hoveredCommentId}
+            onDeleteComment={deleteComment}
+            onUpdateComment={(commentId, nextContent) => {
+              updateComment(commentId, (current) => ({
+                ...current,
+                content: nextContent,
+              }));
+            }}
+            onReplyComment={replyToComment}
+            onSelectComment={selectComment}
+            onHoverComment={setHoveredCommentId}
+            pendingFocusCommentId={pendingFocusCommentId}
+            newCommentDraftIds={newCommentDraftIds}
+            onAutoFocusComment={(commentId) => {
+              setPendingFocusCommentId((current) =>
+                current === commentId ? null : current,
+              );
+            }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 });

@@ -1470,7 +1470,7 @@ describe("PageCard editor integration", () => {
 
     await selectText(editor, "alpha");
     expect(
-      queryByTestId(rendered.container, "document-comment-fallback")
+      queryByTestId(rendered.container, "document-comment-dock-panel")
         ?.textContent,
     ).toContain("Comment body");
 
@@ -1487,7 +1487,7 @@ describe("PageCard editor integration", () => {
     });
 
     expect(
-      queryByTestId(rendered.container, "document-comment-fallback")
+      queryByTestId(rendered.container, "document-comment-dock-panel")
         ?.textContent,
     ).toContain("Comment body");
   });
@@ -1538,7 +1538,7 @@ describe("PageCard editor integration", () => {
     expect(rendered.getEditor().getText()).toContain("Start updated");
   });
 
-  it("comment selection still updates fallback UI", async () => {
+  it("comment selection still updates the docked comment UI", async () => {
     const rendered = await renderPageCard({
       page: {
         id: "doc-5",
@@ -1551,7 +1551,7 @@ describe("PageCard editor integration", () => {
     await selectText(rendered.getEditor(), "alpha");
 
     expect(
-      queryByTestId(rendered.container, "document-comment-fallback")
+      queryByTestId(rendered.container, "document-comment-dock-panel")
         ?.textContent,
     ).toContain("Comment body");
     expect(rendered.container.textContent).toContain("Me");

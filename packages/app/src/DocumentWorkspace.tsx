@@ -712,6 +712,8 @@ export function DocumentWorkspace({
 
   return (
     <div
+      data-testid="document-scroll-container"
+      data-document-scroll-container="true"
       className={cn(
         "min-h-0 flex-1 overflow-y-auto px-8 pb-8 sm:px-12",
         conflictNotice ? "pt-40 sm:pt-28" : "pt-10",
