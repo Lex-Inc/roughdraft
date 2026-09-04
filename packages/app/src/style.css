@@ -829,3 +829,62 @@
     transition: none;
   }
 }
+
+/*
+ * Docked comment composer.
+ *
+ * Below the 1100px breakpoint the anchored review rail is hidden, so the
+ * composer for the active thread docks to the bottom of the viewport instead
+ * of stacking above the document. Keeping it out of the document flow is what
+ * preserves the reviewer's scroll position: focusing the textarea has nothing
+ * to scroll into view.
+ *
+ * The dock is layered below the fixed review-handoff controls (z-index 60) so
+ * "I'm done" stays clickable while a comment is open.
+ */
+.document-comment-dock {
+  display: none;
+}
+
+@media (max-width: 1099.98px) {
+  /*
+   * The gutter and max width mirror the document column (px-8 / sm:px-12 on the
+   * scroll container, max-w-[46.5rem] on the main column) so the dock reads as
+   * part of the document rather than a separate floating window.
+   */
+  .document-comment-dock {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    display: flex;
+    justify-content: flex-start;
+    padding: 0 2rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    pointer-events: none;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1099.98px) {
+  .document-comment-dock {
+    padding-right: 3rem;
+    padding-left: 3rem;
+  }
+}
+
+.document-comment-dock .document-comment-dock-panel {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 46.5rem;
+  max-height: min(45vh, 26rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-color: #dfdfdc;
+  background-color: var(--card);
+  box-shadow: 0 20px 48px rgba(57, 47, 38, 0.18);
+}
+
+.dark .document-comment-dock .document-comment-dock-panel {
+  border-color: var(--border);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.45);
+}
