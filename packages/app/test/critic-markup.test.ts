@@ -1147,4 +1147,25 @@ describe("Markdown rich-text round-trip regressions", () => {
 
     expect(richTextRoundTrip(input)).toBe(input);
   });
+
+  it("renders tables with inline code in more than one cell of a row", () => {
+    const input = [
+      "| Key | Value |",
+      "| --- | --- |",
+      "| `a` | `1` |",
+      "",
+    ].join("\n");
+
+    expect(criticMarkdownToRenderedHtml(input).html).toContain("<table>");
+    expect(richTextRoundTrip(input)).toBe(input);
+  });
+
+  it.each([
+    "| ``a | b`` | `1` |",
+    "| ``x `a|b` | c |",
+  ])("preserves tables with a code span pipe in %s", (row) => {
+    const input = ["| Key | Value |", "| --- | --- |", row, ""].join("\n");
+
+    expect(richTextRoundTrip(input)).toBe(input);
+  });
 });
